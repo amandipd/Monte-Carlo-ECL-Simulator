@@ -1,10 +1,11 @@
 const express = require("express");
-
+const path = require("path");
 const app = express();
 
-app.get("/", (request, response) => {
-  response.send("<h1>Hello World!!</h1>");
-});
+// Set static folder
+app.use(express.static(path.join(__dirname, 'public')));
+
+// we use app.use() when we want to use middleware
 
 const PORT = process.env.PORT || 5000;
 
