@@ -8,10 +8,15 @@ const app = express();
 // Init middleware
 // app.use(logger);
 
+// Body Parser Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
 // Set static folder
 app.use(express.static(path.join(__dirname, "public")));
 
-app.use("/api/members", require("./routes/api/members"));
+// Members API Routes
+app.use("/api/members", require("../routes/api/members"));
 
 // we use app.use() when we want to use middleware
 
