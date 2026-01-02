@@ -1,4 +1,5 @@
-import pool from "../config/db";
+// Contains service functions that interact with PostgreSQL database
+import pool from "../config/db.js";
 
 export const getAllUsersService = async () => {
     const result = await pool.query("SELECT * FROM users");

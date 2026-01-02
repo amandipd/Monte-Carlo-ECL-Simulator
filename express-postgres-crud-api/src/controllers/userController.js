@@ -1,4 +1,5 @@
-import { getAllUsersService } from "../models/userModel";
+// Handles HTTP requests/responses and calls the model services
+import { getAllUsersService, createUserService, getUserByIdService, updateUserService, deleteUserService } from "../models/userModel.js";
 
 // Standardized response function
 const handleResponse = (res, status, message, data=null) => {
@@ -22,7 +23,7 @@ export const createUser = async (req, res, next) => {
 export const getAllUsers = async (req, res, next) => {
     try{
         const users = await getAllUsersService();
-        handleResponse(res, 200, "User fetched successfully", newUser)
+        handleResponse(res, 200, "User fetched successfully", users)
     } catch(err) {
         next(err);
     }
@@ -30,7 +31,7 @@ export const getAllUsers = async (req, res, next) => {
 
 export const getUserById = async (req, res, next) => {
     try{
-        const users = await getUserByIdService(req.params.id);
+        const user = await getUserByIdService(req.params.id);
         if (!user) return handleResponse(res, 404, "User not found");
         handleResponse(res, 200, "User fetched successfully", user)
     } catch(err) {

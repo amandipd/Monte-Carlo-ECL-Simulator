@@ -1,4 +1,6 @@
+// Defines the Express routes that map HTTP methods and paths to controller functions
 import express from "express";
+import { createUser, getAllUsers, getUserById, updateUser, deleteUser } from "../controllers/userController.js";
 
 const router = express.Router();
 
