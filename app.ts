@@ -1,13 +1,7 @@
-/**
- * Main entry point for testing the Credit Risk & ECL Engine
- * 
- * This file is for testing your implementations as you build them.
- */
-
 import { calculateAmortization } from './src/modules/amortization';
 import { calculateMonthlyMarginalPD, generateMarginalPDArray} from './src/modules/riskDecay';
 import { calculateDiscountFactor } from './src/modules/discounting';
-// import { calculateTotalECL } from './src/modules/eclCalculator';
+import { calculateTotalECL } from './src/modules/eclCalculator';
 
 // Test M1: Amortization Engine (EAD)
 console.log('=== Testing M1: Amortization Engine ===');
@@ -36,14 +30,13 @@ const eir = 0.06; // 6% annual
 const df = calculateDiscountFactor(eir, 12);
 console.log(`Discount Factor (month 12): ${df}`);
 
-// TODO: Add tests for full ECL calculation
-// console.log('=== Testing Full ECL Calculation ===');
-// const result = calculateTotalECL(
-//     10000,  // loan amount
-//     0.06,   // interest rate
-//     0.05,   // annual PD
-//     0.45,   // LGD (45%)
-//     0.06,   // EIR
-//     12      // months
-// );
-// console.log(`Total ECL: $${result.totalECL.toFixed(2)}`);
+console.log('=== Testing Full ECL Calculation ===');
+const result = calculateTotalECL(
+     10000,  // loan amount
+     0.06,   // interest rate
+    0.05,   // annual PD
+    0.45,   // LGD (45%)
+     0.06,   // EIR
+     12      // months
+ );
+console.log(`Total ECL: $${result.totalECL.toFixed(2)}`);

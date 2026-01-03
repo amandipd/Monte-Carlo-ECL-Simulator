@@ -12,33 +12,11 @@
  * - M1: Amortization Engine (EAD)
  * - M2: Risk Decay Engine (Marginal PD)
  * - M3: Discounting Engine (NPV)
- * 
- * TODO: Implement the following functions:
- * 
- * 1. calculateMonthlyECL(
- *      ead: number,           // Exposure at default for this month
- *      marginalPD: number,    // Probability of default this month
- *      lgd: number,           // Loss given default (0-1)
- *      discountFactor: number // Discount factor for NPV
- *    ): number
- *    - Calculate ECL for a single month
- *    - Formula: (EAD × PD × LGD) × discountFactor
- * 
- * 2. calculateTotalECL(
- *      loanAmount: number,
- *      annualInterestRate: number,
- *      annualPD: number,
- *      lgd: number,
- *      eir: number,
- *      months: number
- *    ): { totalECL: number, monthlyBreakdown: number[] }
- *    - Calculate total ECL for entire loan term
- *    - Uses all three modules
- *    - Returns total ECL and monthly breakdown
- */
+**/
 
-import { calculateAmortization } from './amortization';
-// TODO: Import functions from riskDecay and discounting modules
+import { calculateAmortization } from "./amortization";
+import { generateMarginalPDArray } from "./riskDecay";
+import { generateDiscountFactors } from "./discounting";
 
 export function calculateMonthlyECL(
     ead: number,
@@ -46,9 +24,7 @@ export function calculateMonthlyECL(
     lgd: number,
     discountFactor: number
 ): number {
-    // TODO: Implement this function
-    // ECL = (EAD × PD × LGD) × discountFactor
-    throw new Error("Not implemented yet");
+    return ead * marginalPD * lgd * discountFactor;
 }
 
 export function calculateTotalECL(
@@ -66,6 +42,20 @@ export function calculateTotalECL(
     // 4. For each month, calculate: ECL = (EAD × PD × LGD) × discountFactor
     // 5. Sum all monthly ECLs for total
     // 6. Return total and monthly breakdown
-    
-    throw new Error("Not implemented yet");
+
+    const ead = calculateAmortization(loanAmount, annualInterestRate, months);
+    const marginalPDArray = generateMarginalPDArray(annualPD, months);
+    const discountFactors = generateDiscountFactors(eir, months);
+
+    const monthlyBreakdown: number[] = []
+
+    for (let i = 0; i < months; i++) {
+        const monthlyECL = calculateMonthlyECL(ead[i], marginalPDArray[i], lgd, discountFactors[i]);
+        monthlyBreakdown.push(monthlyECL);
+    }
+
+    const totalECL = monthlyBreakdown.reduce((sum, ecl) => sum + ecl, 0);
+
+    return { totalECL, monthlyBreakdown };
+
 }
