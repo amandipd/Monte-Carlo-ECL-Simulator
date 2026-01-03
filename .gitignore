@@ -1,1 +1,7 @@
 .env
+
+# Instructional/Reference Files
+IMPLEMENTATION_GUIDE.md
+QUICK_START.md
+Credit Risk and ECL Engine.pdf
+*.pdf
