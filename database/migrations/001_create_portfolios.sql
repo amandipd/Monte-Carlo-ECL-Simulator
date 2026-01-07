@@ -8,3 +8,5 @@ CREATE TABLE IF NOT EXISTS portfolios (
 );
 
 CREATE INDEX idx_portfolios_created_at ON portfolios(created_at);
+ 
+ -- id | name | description | created_at | updated_at

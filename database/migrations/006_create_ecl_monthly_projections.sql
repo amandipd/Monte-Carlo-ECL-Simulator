@@ -10,5 +10,7 @@ CREATE TABLE IF NOT EXISTS ecl_monthly_projections (
     UNIQUE(ecl_result_id, month)
 );
 
+-- id | ecl_result_id | month | ead | marginal_pd | discount_factor | ecl
+
 CREATE INDEX idx_ecl_projections_result_id ON ecl_monthly_projections(ecl_result_id);
 CREATE INDEX idx_ecl_projections_month ON ecl_monthly_projections(month);

@@ -14,3 +14,6 @@ INSERT INTO collateral_types (name, lgd_factor, description) VALUES
     ('Unsecured', 0.65, 'No collateral'),
     ('Equipment', 0.50, 'Business equipment collateral')
 ON CONFLICT (name) DO NOTHING;
+
+
+-- id | name | lgd_factor | description | created_at

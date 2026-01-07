@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS loans (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- id | portfolio id | loan_amount | annual_interest_rate | term_months | fico | collateral_id | stage | annual_pd | lgd | eir | created_at | updated_at
+
 CREATE INDEX idx_loans_portfolio_id ON loans(portfolio_id);
 CREATE INDEX idx_loans_fico ON loans(fico);
 CREATE INDEX idx_loans_stage ON loans(stage);

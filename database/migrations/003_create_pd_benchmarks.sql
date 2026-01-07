@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS pd_benchmarks (
     UNIQUE(fico_min, fico_max, version)
 );
 
+-- id | fico_min | fico_max | annual_pd | version | effective_date | created_at
+
 CREATE INDEX idx_pd_benchmarks_fico ON pd_benchmarks(fico_min, fico_max);
 CREATE INDEX idx_pd_benchmarks_version ON pd_benchmarks(version, effective_date);
 
