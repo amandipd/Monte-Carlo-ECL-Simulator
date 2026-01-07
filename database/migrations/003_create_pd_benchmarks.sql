@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS pd_benchmarks (
 
 -- id | fico_min | fico_max | annual_pd | version | effective_date | created_at
 
-CREATE INDEX idx_pd_benchmarks_fico ON pd_benchmarks(fico_min, fico_max);
-CREATE INDEX idx_pd_benchmarks_version ON pd_benchmarks(version, effective_date);
+CREATE INDEX IF NOT EXISTS idx_pd_benchmarks_fico ON pd_benchmarks(fico_min, fico_max);
+CREATE INDEX IF NOT EXISTS idx_pd_benchmarks_version ON pd_benchmarks(version, effective_date);
 
 -- Insert sample PD benchmarks (version 1)
 -- These are example values - adjust based on your risk model

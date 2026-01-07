@@ -10,5 +10,5 @@ CREATE TABLE IF NOT EXISTS ecl_results (
 
 -- id | loan_id | total_ecl | calculated_at | pd_benchmark_version | notes
 
-CREATE INDEX idx_ecl_results_loan_id ON ecl_results(loan_id);
-CREATE INDEX idx_ecl_results_calculated_at ON ecl_results(calculated_at);
+CREATE INDEX IF NOT EXISTS idx_ecl_results_loan_id ON ecl_results(loan_id);
+CREATE INDEX IF NOT EXISTS idx_ecl_results_calculated_at ON ecl_results(calculated_at);
