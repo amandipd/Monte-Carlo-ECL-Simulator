@@ -1,4 +1,4 @@
-# Stochastic Credit Risk Engine
+# Distributed Monte Carlo Risk Engine
 A quantitative risk system designed to execute Monte Carlo simulations on large loan portfolios (10k+ assets) to forecast Expected Credit loss under volatile economic conditions.
 
 ## Architecture & Roadmap (v2 Python Migration)
