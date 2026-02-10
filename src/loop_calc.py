@@ -2,9 +2,10 @@ import time
 import random
 import math
 
+from config import N_LOANS
+
 # Constants
 HAZARD_RATE = 0.05  # 5% change of default per year
-N_LOANS = 100_000_000  # Number of loans
 
 
 def calculate_single_default_prob(hazard_rate: float, time_horizon: float) -> bool:
@@ -55,7 +56,7 @@ def run_simulation():
     print(f"Time Taken: {elapsed_time:.4f} seconds (Naive Loop)")
 
     # Save results to file
-    output_file = "results/naive_results.txt"
+    output_file = "../results/naive_results.txt"
     with open(output_file, "w") as f:
         f.write("Simulation Results\n")
         f.write("=" * 50 + "\n")

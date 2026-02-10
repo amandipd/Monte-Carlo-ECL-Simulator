@@ -1,9 +1,10 @@
 import numpy as np
 import time
 
+from config import N_LOANS
+
 # Constants
 HAZARD_RATE = 0.05  # 5% change of default per year
-N_LOANS = 100_000_000  # Number of loans
 TIME_HORIZON = 1.0
 
 
@@ -35,7 +36,7 @@ def run_simulation():
     print(f"Time Taken: {elapsed_time:.4f} seconds (NumPy Vectorization)")
 
     # Save results to file
-    output_file = "results/vectorized_results.txt"
+    output_file = "../results/vectorized_results.txt"
     with open(output_file, "w") as f:
         f.write("Simulation Results\n")
         f.write("=" * 50 + "\n")
