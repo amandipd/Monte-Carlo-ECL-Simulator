@@ -4,6 +4,7 @@ Runner script to execute all simulation variants:
 - NumPy vectorized implementation
 - Multicore / ProcessPoolExecutor implementation
 """
+from pathlib import Path
 
 from loop_calc import run_simulation as run_naive_simulation
 from vectorized_calc import run_simulation as run_vectorized_simulation
@@ -41,20 +42,20 @@ def main():
     print("=" * 70)
 
     # Aggregate individual result files into a single summary file
+    _results_dir = Path(__file__).resolve().parent.parent.parent / "results"
     result_files = [
-        ("../results/naive_results.txt", "NAIVE SIMULATION RESULTS"),
-        ("../results/vectorized_results.txt", "VECTORIZED SIMULATION RESULTS"),
-        ("../results/multicore_results.txt", "MULTICORE SIMULATION RESULTS"),
+        (_results_dir / "naive_results.txt", "NAIVE SIMULATION RESULTS"),
+        (_results_dir / "vectorized_results.txt", "VECTORIZED SIMULATION RESULTS"),
+        (_results_dir / "multicore_results.txt", "MULTICORE SIMULATION RESULTS"),
     ]
-
-    all_results_path = "../results/all_results.txt"
+    all_results_path = _results_dir / "all_results.txt"
     try:
-        with open(all_results_path, "w") as out:
+        with open(all_results_path, "w", encoding="utf-8") as out:
             for path, heading in result_files:
                 out.write(f"{heading}\n")
                 out.write("-" * len(heading) + "\n")
                 try:
-                    with open(path, "r") as infile:
+                    with open(path, "r", encoding="utf-8") as infile:
                         out.write(infile.read().rstrip())
                 except FileNotFoundError:
                     out.write(f"(Missing file: {path})")
