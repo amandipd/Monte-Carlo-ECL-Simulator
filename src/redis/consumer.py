@@ -15,8 +15,25 @@ QUEUE_JOBS = "simulation_jobs"
 QUEUE_RESULTS = "simulation_results"
 POP_TIMEOUT = 1 # in seconds;l short so we can react to shutdown
 
+# Retry loop so consumer waits instead of failing
+def connect_with_retry(host=None, port=None, max_retries=10, retry_delay=2):
+    host = host or REDIS_HOST
+    port = port or REDIS_PORT
+    for attempt in range(max_retries):
+        try:
+            r = redis.Redis(host=host, port=port, db=0)
+            r.ping()
+            return r
+        except (redis.ConnectionError, redis.TimeoutError):
+            if attempt < max_retries - 1:
+                print(f"Connection failed (attempt {attempt + 1}/{max_retries}). Retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+            else:
+                print("Max retries reached. Exiting.")
+                raise
+
 def main():
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+    r = connect_with_retry()
     print("Connected to Redis. Waiting for jobs...")
 
     while True:
