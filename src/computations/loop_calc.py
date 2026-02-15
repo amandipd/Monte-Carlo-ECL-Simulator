@@ -1,4 +1,3 @@
-from config import N_LOANS
 import sys
 import time
 import random
@@ -8,6 +7,9 @@ from pathlib import Path
 _src = Path(__file__).resolve().parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
+
+from config import N_LOANS
+
 
 # Constants
 HAZARD_RATE = 0.05  # 5% change of default per year

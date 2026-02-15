@@ -4,11 +4,18 @@ Runner script to execute all simulation variants:
 - NumPy vectorized implementation
 - Multicore / ProcessPoolExecutor implementation
 """
+import sys
+from datetime import datetime
 from pathlib import Path
 
-from loop_calc import run_simulation as run_naive_simulation
-from vectorized_calc import run_simulation as run_vectorized_simulation
+# Ensure src is on path before importing submodules (they use config)
+_src = Path(__file__).resolve().parent.parent
+if str(_src) not in sys.path:
+    sys.path.insert(0, str(_src))
+
 from multicore_calc import run_parallel as run_multicore_simulation
+from vectorized_calc import run_simulation as run_vectorized_simulation
+from loop_calc import run_simulation as run_naive_simulation
 
 
 def main():
@@ -49,8 +56,11 @@ def main():
         (_results_dir / "multicore_results.txt", "MULTICORE SIMULATION RESULTS"),
     ]
     all_results_path = _results_dir / "all_results.txt"
+    run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
         with open(all_results_path, "w", encoding="utf-8") as out:
+            out.write(f"Run completed: {run_timestamp}\n")
+            out.write("=" * 50 + "\n\n")
             for path, heading in result_files:
                 out.write(f"{heading}\n")
                 out.write("-" * len(heading) + "\n")

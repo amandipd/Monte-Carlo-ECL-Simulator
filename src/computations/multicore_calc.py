@@ -1,14 +1,21 @@
-from config import N_LOANS
 import sys
 import multiprocessing
 import time
-from concurrent.futures import ProcessPoolExecutor
 import numpy as np
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 _src = Path(__file__).resolve().parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
+
+from config import N_LOANS
+
+_src = Path(__file__).resolve().parent.parent
+if str(_src) not in sys.path:
+    sys.path.insert(0, str(_src))
+
+from config import N_LOANS
 
 N_CORES = multiprocessing.cpu_count()
 HAZARD_RATE = 0.05  # 5% change of default per year
