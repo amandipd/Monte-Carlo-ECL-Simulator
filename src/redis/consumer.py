@@ -1,7 +1,8 @@
 import json
-import sys
 import time
+import sys
 from pathlib import Path
+
 import redis
 
 _src = Path(__file__).resolve().parent.parent
@@ -13,7 +14,7 @@ from computations.multicore_calc import simulation_chunk
 
 QUEUE_JOBS = "simulation_jobs"
 QUEUE_RESULTS = "simulation_results"
-POP_TIMEOUT = 1 # in seconds;l short so we can react to shutdown
+POP_TIMEOUT = 1  # seconds; short so we can react to shutdown
 
 # Retry loop so consumer waits instead of failing
 def connect_with_retry(host=None, port=None, max_retries=10, retry_delay=2):

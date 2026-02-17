@@ -1,16 +1,14 @@
-from config import N_LOANS
 import sys
-import numpy as np
 import time
 from pathlib import Path
+
+import numpy as np
 
 _src = Path(__file__).resolve().parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-# Constants
-HAZARD_RATE = 0.05  # 5% change of default per year
-TIME_HORIZON = 1.0
+from config import HAZARD_RATE, N_LOANS, RESULTS_DIR, TIME_HORIZON
 
 
 def run_simulation():
@@ -40,9 +38,9 @@ def run_simulation():
     print(f"Results: {defaults} defaults / {N_LOANS} total.")
     print(f"Time Taken: {elapsed_time:.4f} seconds (NumPy Vectorization)")
 
-    # Save results to file (project root / results)
-    _results_dir = Path(__file__).resolve().parent.parent.parent / "results"
-    output_file = _results_dir / "vectorized_results.txt"
+    # Save results to file
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    output_file = RESULTS_DIR / "vectorized_results.txt"
     with open(output_file, "w", encoding="utf-8") as f:
         f.write("Simulation Results\n")
         f.write("=" * 50 + "\n")
