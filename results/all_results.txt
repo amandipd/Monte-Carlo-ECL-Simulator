@@ -1,4 +1,4 @@
-Run completed: 2026-02-17 12:20:06
+Run completed: 2026-02-17 12:42:56
 ==================================================
 
 NAIVE SIMULATION RESULTS
@@ -6,9 +6,9 @@ NAIVE SIMULATION RESULTS
 Simulation Results
 ==================================================
 Total Loans: 50,000,000
-Defaults: 2,438,942
-Default Rate: 0.048779 (4.8779%)
-Time Taken: 9.1787 seconds
+Defaults: 2,438,185
+Default Rate: 0.048764 (4.8764%)
+Time Taken: 18.2704 seconds
 Method: Naive Loop
 
 VECTORIZED SIMULATION RESULTS
@@ -16,9 +16,9 @@ VECTORIZED SIMULATION RESULTS
 Simulation Results
 ==================================================
 Total Loans: 50,000,000
-Defaults: 2,439,076
-Default Rate: 0.048782 (4.8782%)
-Time Taken: 1.4832 seconds
+Defaults: 2,441,138
+Default Rate: 0.048823 (4.8823%)
+Time Taken: 0.7861 seconds
 Method: NumPy Vectorization
 
 MULTICORE SIMULATION RESULTS
@@ -26,8 +26,8 @@ MULTICORE SIMULATION RESULTS
 Simulation Results
 ==================================================
 Total Loans: 50,000,000
-Defaults: 2,439,492
-Default Rate: 0.048790 (4.8790%)
-Time Taken: 0.7887 seconds
+Defaults: 2,438,855
+Default Rate: 0.048777 (4.8777%)
+Time Taken: 1.0367 seconds
 Method: Multicore (ProcessPoolExecutor)
 

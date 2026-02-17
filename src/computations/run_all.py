@@ -13,6 +13,7 @@ _src = Path(__file__).resolve().parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
+from config import RESULTS_DIR
 from multicore_calc import run_parallel as run_multicore_simulation
 from vectorized_calc import run_simulation as run_vectorized_simulation
 from loop_calc import run_simulation as run_naive_simulation
@@ -20,7 +21,6 @@ from loop_calc import run_simulation as run_naive_simulation
 
 def main():
     """Run all simulations (naive, vectorized, multicore)."""
-
     print("=" * 70)
     print("RUNNING NAIVE SIMULATION")
     print("=" * 70)
@@ -49,15 +49,15 @@ def main():
     print("=" * 70)
 
     # Aggregate individual result files into a single summary file
-    _results_dir = Path(__file__).resolve().parent.parent.parent / "results"
     result_files = [
-        (_results_dir / "naive_results.txt", "NAIVE SIMULATION RESULTS"),
-        (_results_dir / "vectorized_results.txt", "VECTORIZED SIMULATION RESULTS"),
-        (_results_dir / "multicore_results.txt", "MULTICORE SIMULATION RESULTS"),
+        (RESULTS_DIR / "naive_results.txt", "NAIVE SIMULATION RESULTS"),
+        (RESULTS_DIR / "vectorized_results.txt", "VECTORIZED SIMULATION RESULTS"),
+        (RESULTS_DIR / "multicore_results.txt", "MULTICORE SIMULATION RESULTS"),
     ]
-    all_results_path = _results_dir / "all_results.txt"
+    all_results_path = RESULTS_DIR / "all_results.txt"
     run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         with open(all_results_path, "w", encoding="utf-8") as out:
             out.write(f"Run completed: {run_timestamp}\n")
             out.write("=" * 50 + "\n\n")

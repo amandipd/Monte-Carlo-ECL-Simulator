@@ -1,18 +1,14 @@
+import math
+import random
 import sys
 import time
-import random
-import math
 from pathlib import Path
 
 _src = Path(__file__).resolve().parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from config import N_LOANS
-
-
-# Constants
-HAZARD_RATE = 0.05  # 5% change of default per year
+from config import HAZARD_RATE, N_LOANS, RESULTS_DIR, TIME_HORIZON
 
 
 def calculate_single_default_prob(hazard_rate: float, time_horizon: float) -> bool:
@@ -39,11 +35,10 @@ def run_simulation():
     start_time = time.time()
     defaults = 0
 
-    # Bottleneck: Python For-Loop
     print(f"Starting simulation for {N_LOANS} loans ...")
     for _ in range(N_LOANS):
 
-        pd = calculate_single_default_prob(HAZARD_RATE, 1.0)
+        pd = calculate_single_default_prob(HAZARD_RATE, TIME_HORIZON)
 
         if pd:  # If default occurred
             defaults += 1
@@ -62,9 +57,9 @@ def run_simulation():
     print(f"Results: {defaults} defaults / {N_LOANS} total.")
     print(f"Time Taken: {elapsed_time:.4f} seconds (Naive Loop)")
 
-    # Save results to file (project root / results)
-    _results_dir = Path(__file__).resolve().parent.parent.parent / "results"
-    output_file = _results_dir / "naive_results.txt"
+    # Save results to file
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    output_file = RESULTS_DIR / "naive_results.txt"
     with open(output_file, "w", encoding="utf-8") as f:
         f.write("Simulation Results\n")
         f.write("=" * 50 + "\n")

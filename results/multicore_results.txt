@@ -1,7 +1,7 @@
 Simulation Results
 ==================================================
 Total Loans: 50,000,000
-Defaults: 2,439,492
-Default Rate: 0.048790 (4.8790%)
-Time Taken: 0.7887 seconds
+Defaults: 2,438,855
+Default Rate: 0.048777 (4.8777%)
+Time Taken: 1.0367 seconds
 Method: Multicore (ProcessPoolExecutor)

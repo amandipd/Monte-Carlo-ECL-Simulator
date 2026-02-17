@@ -1,25 +1,18 @@
-import sys
 import multiprocessing
+import sys
 import time
-import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-_src = Path(__file__).resolve().parent.parent
-if str(_src) not in sys.path:
-    sys.path.insert(0, str(_src))
-
-from config import N_LOANS
+import numpy as np
 
 _src = Path(__file__).resolve().parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from config import N_LOANS
+from config import HAZARD_RATE, N_LOANS, RESULTS_DIR, TIME_HORIZON
 
 N_CORES = multiprocessing.cpu_count()
-HAZARD_RATE = 0.05  # 5% change of default per year
-TIME_HORIZON = 1.0
 
 
 def simulation_chunk(n_sims):
@@ -65,9 +58,9 @@ def run_parallel():
     print(f"Results: {total_defaults} defaults / {N_LOANS} total.")
     print(f"Time Taken: {elapsed_time:.4f} seconds (Multicore)")
 
-    # Save results to file (project root / results)
-    _results_dir = Path(__file__).resolve().parent.parent.parent / "results"
-    output_file = _results_dir / "multicore_results.txt"
+    # Save results to file
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    output_file = RESULTS_DIR / "multicore_results.txt"
     with open(output_file, "w", encoding="utf-8") as f:
         f.write("Simulation Results\n")
         f.write("=" * 50 + "\n")

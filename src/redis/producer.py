@@ -3,16 +3,17 @@ Producer: pushes simulation jobs to Redis. Workers (consumers) process them.
 After pushing, waits for all results and prints the total defaults.
 """
 import json
-import sys
 import time
+import sys
 from pathlib import Path
+
 import redis
 
 _src = Path(__file__).resolve().parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from config import N_LOANS, N_JOBS, REDIS_HOST, REDIS_PORT
+from config import N_LOANS, N_JOBS, REDIS_HOST, REDIS_PORT, RESULTS_DIR
 
 QUEUE_JOBS = "simulation_jobs"
 QUEUE_RESULTS = "simulation_results"
@@ -53,9 +54,8 @@ def main():
     print(f"Default rate: {default_rate:.6f} ({default_rate * 100:.4f}%)")
     print(f"Time Taken: {elapsed_time:.4f} seconds (Redis)")
 
-    # Save results
-    _results_dir = Path(__file__).resolve().parent.parent.parent / "results"
-    output_file = _results_dir / "redis_results.txt"
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    output_file = RESULTS_DIR / "redis_results.txt"
     try:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write("Simulation Results\n")
