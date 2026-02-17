@@ -9,5 +9,6 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-interaction --no-root --only main
 
 COPY src/ src/
+RUN mkdir -p /app/results
 
 CMD ["python", "src/redis/consumer.py"]

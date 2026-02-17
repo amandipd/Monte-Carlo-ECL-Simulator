@@ -1,0 +1,7 @@
+Simulation Results
+==================================================
+Total Loans: 500,000,000
+Defaults: 24,377,508
+Default Rate: 0.048755 (4.8755%)
+Time Taken: 0.3836 seconds
+Method: Redis (distributed workers)

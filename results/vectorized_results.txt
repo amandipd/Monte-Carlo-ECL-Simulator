@@ -1,0 +1,7 @@
+Simulation Results
+==================================================
+Total Loans: 50,000,000
+Defaults: 2,439,076
+Default Rate: 0.048782 (4.8782%)
+Time Taken: 1.4832 seconds
+Method: NumPy Vectorization
