@@ -1,4 +1,4 @@
-# Distributed Monte Carlo Risk Engine
+# Distributed Monte Carlo Expected Credit Loss (ECL) Engine
 A quantitative risk system designed to execute Monte Carlo simulations on 10M+ loan portfolios to forecast Expected Credit loss under volatile economic conditions.
 
 ## Setup (Poetry)
