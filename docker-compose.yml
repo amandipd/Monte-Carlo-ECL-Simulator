@@ -60,3 +60,20 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # Next.js dashboard (Quant-as-a-Service frontend).
+  # No ANTHROPIC_API_KEY needed — chat is powered by local Ollama.
+  frontend:
+    image: node:20-slim
+    working_dir: /app
+    depends_on:
+      - surrogate-api
+    ports:
+      - "3000:3000"
+    environment:
+      # Browser runs on the host, so it reaches the API via the mapped host port.
+      NEXT_PUBLIC_API_BASE: http://localhost:8080
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
