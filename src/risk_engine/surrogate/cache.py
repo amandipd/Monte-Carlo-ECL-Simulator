@@ -106,3 +106,46 @@ class ECLCache:
             self._client.setex(key, self.ttl_seconds, payload)
         except redis.RedisError:
             self._available = False
+
+    def get_json(self, key: str) -> dict | None:
+        """Fetch and decode a JSON payload stored under an arbitrary key.
+
+        Used for non-macro-keyed entries such as ``sim_result:{job_id}`` and
+        cached chat responses. Degrades gracefully when Redis is unavailable.
+        """
+        if not self.available:
+            return None
+
+        try:
+            raw = self._client.get(key)
+        except redis.RedisError:
+            self._available = False
+            return None
+
+        if raw is None:
+            return None
+
+        try:
+            return json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+    def set_json(
+        self,
+        key: str,
+        payload: dict,
+        ttl_seconds: int | None = None,
+    ) -> None:
+        """Store a JSON-serializable payload under an arbitrary key.
+
+        Falls back to the cache's default TTL when ``ttl_seconds`` is omitted.
+        Degrades gracefully when Redis is unavailable.
+        """
+        if not self.available:
+            return
+
+        ttl = self.ttl_seconds if ttl_seconds is None else ttl_seconds
+        try:
+            self._client.setex(key, ttl, json.dumps(payload))
+        except (redis.RedisError, TypeError, ValueError):
+            self._available = False

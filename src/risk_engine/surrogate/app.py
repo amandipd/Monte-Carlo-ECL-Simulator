@@ -3,7 +3,11 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 
+from risk_engine.api.chat import router as chat_router
+from risk_engine.api.simulations import router as simulations_router
+from risk_engine.api.ws import router as ws_router
 from risk_engine.config import PROJECT_TITLE
 from risk_engine.surrogate.agentic_translator import translate_scenario
 from risk_engine.surrogate.cache import ECLCache
@@ -51,6 +55,17 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title=APP_TITLE, lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(simulations_router, prefix="/api/v3")
+app.include_router(chat_router, prefix="/api/v3")
+app.include_router(ws_router, prefix="/api/v3")
 
 @app.get("/health")
 async def health(request: Request) -> dict[str, str | bool]:
