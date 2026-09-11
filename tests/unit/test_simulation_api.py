@@ -1,7 +1,7 @@
 """Tests for the v3 simulation API (submit + results).
 
-Reuses the ``api_client`` fixture from ``tests/conftest.py`` (TestClient with a
-freshly trained surrogate and an in-memory ``FakeRedis`` cache).
+Reuses the ``api_client`` fixture from ``tests/conftest.py`` (TestClient with
+an in-memory ``FakeRedis`` cache).
 """
 
 

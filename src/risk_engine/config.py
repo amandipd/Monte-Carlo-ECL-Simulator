@@ -8,14 +8,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-PROJECT_TITLE = "Monte Carlo Expected Credit Loss Simulator with PyTorch Neural Surrogate"
+PROJECT_TITLE = "Monte Carlo Expected Credit Loss Simulator"
 _env_path = PROJECT_ROOT / ".env"
 load_dotenv(_env_path)
 
 RESULTS_DIR = PROJECT_ROOT / "results"
 DATA_DIR = PROJECT_ROOT / "data"
-MODELS_DIR = PROJECT_ROOT / "models"
-SYNTHETIC_DATASET_PATH = DATA_DIR / "synthetic_ecl_dataset.csv"
 
 N_LOANS = int(os.getenv("N_LOANS", "100000000"))
 
@@ -44,27 +42,12 @@ MACRO_BOUNDS = {
     ),
 }
 
-# Synthetic training data generation
-N_SAMPLES = int(os.getenv("N_SAMPLES", "1000"))
-TRAINING_N_LOANS = int(os.getenv("TRAINING_N_LOANS", "500000"))
-TRAINING_LABEL_SEED = int(os.getenv("TRAINING_LABEL_SEED", "42"))
-EVAL_MAE_THRESHOLD = float(os.getenv("EVAL_MAE_THRESHOLD", "0.05"))
-EVAL_SPOT_CHECK_TOLERANCE = float(os.getenv("EVAL_SPOT_CHECK_TOLERANCE", "0.10"))
-EVAL_SPOT_CHECK_COUNT = int(os.getenv("EVAL_SPOT_CHECK_COUNT", "5"))
-
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 
 # ECL inference cache (separate Redis keys from simulation job queues)
 ECL_CACHE_ENABLED = os.getenv("ECL_CACHE_ENABLED", "true").lower() in {"1", "true", "yes"}
 ECL_CACHE_TTL = int(os.getenv("ECL_CACHE_TTL", "86400"))
-
-# LLM agent layer (Ollama — free, local; no paid API key required)
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
-LLM_MOCK = os.getenv("LLM_MOCK", "false").lower() in {"1", "true", "yes"}
-OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
 
 # How many jobs to split work into (more jobs = more workers can run in parallel)
 N_JOBS = int(os.getenv("N_JOBS", "10"))

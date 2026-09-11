@@ -9,6 +9,6 @@ COPY pyproject.toml poetry.lock* ./
 COPY src/ src/
 RUN poetry install --no-interaction
 
-RUN mkdir -p /app/results /app/models /app/data
+RUN mkdir -p /app/results /app/data
 
 CMD ["python", "-m", "risk_engine.queue.consumer"]

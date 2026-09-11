@@ -23,7 +23,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from risk_engine.monte_carlo.ecl_engine import portfolio_ecl_from_defaults
 from risk_engine.monte_carlo.multicore_calc import N_CORES, simulation_chunk
-from risk_engine.surrogate.cache import ECLCache
+from risk_engine.api.cache import ECLCache
 from risk_engine.api.simulations import (
     _build_payload,
     _distribution_sample_count,

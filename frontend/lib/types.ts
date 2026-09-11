@@ -1,7 +1,7 @@
 // TypeScript interfaces mirroring the backend Pydantic models
 // (see src/risk_engine/api/schemas.py and section 3.3 of CURSOR_PROMPT.md).
 
-export type SimulationMethod = "vectorized" | "multicore" | "surrogate";
+export type SimulationMethod = "vectorized" | "multicore";
 
 export interface MacroCoordinates {
   unemployment_rate: number;
@@ -51,9 +51,4 @@ export interface WSEvent {
   defaults?: number;
   default_rate?: number;
   detail?: string;
-}
-
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
 }
