@@ -1,13 +1,8 @@
 # Monte Carlo Expected Credit Loss Simulator
 
-A quantitative credit-risk system that forecasts **Expected Credit Loss (ECL)** on large loan portfolios under macroeconomic stress. It combines:
+A quantitative credit-risk system that forecasts **Expected Credit Loss (ECL)** on large loan portfolios under macroeconomic stress, computed entirely locally via **Monte Carlo simulation** — vectorized NumPy, multi-core, and Redis-distributed workers.
 
-- **Monte Carlo simulation** (vectorized NumPy, multi-core, and Redis-distributed workers)
-- A **FastAPI gateway** (v3) that runs simulations synchronously or streams multicore progress over a WebSocket
-- **Redis caching** of simulation results
-- A **Next.js dashboard** for submitting scenarios and visualizing results
-
-The original TypeScript prototype (branch `v1-typescript-prototype`) validated core PD/LGD math. This branch adds Python vectorization, distributed execution, and a web dashboard.
+The original TypeScript prototype (branch `v1-typescript-prototype`) validated core PD/LGD math. This branch adds Python vectorization and distributed execution.
 
 ---
 
@@ -19,14 +14,12 @@ The original TypeScript prototype (branch `v1-typescript-prototype`) validated c
 4. [Installation](#installation)
 5. [Quick start](#quick-start)
 6. [Monte Carlo simulation engine](#monte-carlo-simulation-engine)
-7. [v3 simulation API](#v3-simulation-api)
-8. [Frontend dashboard](#frontend-dashboard)
-9. [Redis: job queue vs result cache](#redis-job-queue-vs-result-cache)
-10. [Docker](#docker)
-11. [Testing](#testing)
-12. [Configuration reference](#configuration-reference)
-13. [Troubleshooting](#troubleshooting)
-14. [Development notes](#development-notes)
+7. [Distributed simulation (Redis queue)](#distributed-simulation-redis-queue)
+8. [Docker](#docker)
+9. [Testing](#testing)
+10. [Configuration reference](#configuration-reference)
+11. [Troubleshooting](#troubleshooting)
+12. [Development notes](#development-notes)
 
 ---
 
@@ -35,45 +28,43 @@ The original TypeScript prototype (branch `v1-typescript-prototype`) validated c
 ```mermaid
 flowchart TB
     subgraph inputs [Inputs]
-        FORM[Dashboard form / API client]
+        MACRO[Macro coordinates + n_loans]
     end
 
     subgraph engine [Monte Carlo Engine]
         ECL[ecl_engine.compute_ecl]
-        MC[Vectorized / multicore / Redis workers]
+        NAIVE[loop_calc - naive]
+        VEC[vectorized_calc - NumPy]
+        MULTI[multicore_calc - ProcessPoolExecutor]
     end
 
-    subgraph api [FastAPI Gateway - v3]
-        SUBMIT["POST /api/v3/simulations/submit"]
-        RESULTS["GET /api/v3/simulations/{job_id}/results"]
-        WS["WS /api/v3/ws/simulations/{job_id}"]
-        CACHE[(Redis result cache)]
+    subgraph dist [Redis-distributed]
+        PROD[queue/producer.py]
+        CONS[queue/consumer.py workers]
     end
 
-    subgraph fe [Next.js Dashboard]
-        UI[SimulationForm + charts]
+    subgraph out [Output]
+        TXT[results/*.txt]
     end
 
-    FORM --> SUBMIT
-    SUBMIT --> ECL
-    SUBMIT --> MC
-    SUBMIT --> CACHE
-    MC --> WS
-    WS --> CACHE
-    RESULTS --> CACHE
-    UI --> SUBMIT
-    UI --> RESULTS
-    UI --> WS
+    MACRO --> ECL
+    ECL --> NAIVE --> TXT
+    ECL --> VEC --> TXT
+    ECL --> MULTI --> TXT
+    PROD --> CONS
+    CONS --> MULTI
+    CONS --> PROD
+    PROD --> TXT
 ```
 
 **Data flow summary**
 
 | Stage | What happens |
 |-------|--------------|
-| **Submit** | Client posts macro coordinates + method → `POST /api/v3/simulations/submit` |
-| **Compute** | `vectorized` runs synchronously; `multicore` fans chunks across `ProcessPoolExecutor` in a background task and streams progress over the WebSocket |
-| **Cache** | Completed results are written to Redis under `sim_result:{job_id}` |
-| **Fetch** | Client polls `GET /api/v3/simulations/{job_id}/results` or reads the WebSocket's `final` event |
+| **Configure** | Macro coordinates + portfolio size (`N_LOANS`) load from `.env` via `risk_engine.config`, or are passed as CLI flags |
+| **Simulate** | `compute_ecl()` maps macro inputs → hazard rate → PD, then Monte Carlo–samples defaults across the portfolio, run via one of four execution strategies |
+| **Aggregate** | `ECL = defaults × AVG_EXPOSURE × LGD` |
+| **Output** | Each runner writes its results to a text file under `results/` |
 
 ---
 
@@ -87,11 +78,6 @@ flowchart TB
 │   ├── multicore_results.txt
 │   ├── redis_results.txt
 │   └── all_results.txt
-├── frontend/                          # Next.js dashboard
-│   ├── app/                           # Landing page + dashboard/[jobId] route
-│   ├── components/                    # SimulationForm, charts, skeletons
-│   ├── hooks/                         # useSimulation, useWebSocket
-│   └── lib/                           # API client, types, formatting
 ├── src/risk_engine/                   # Main installable Python package
 │   ├── config.py                      # .env loading, path constants, bounds
 │   ├── monte_carlo/                   # Core ECL engine + simulators
@@ -100,21 +86,12 @@ flowchart TB
 │   │   ├── vectorized_calc.py         # NumPy vectorized (fast)
 │   │   ├── multicore_calc.py          # ProcessPoolExecutor parallel
 │   │   └── run_all.py                 # Run all three + merge results
-│   ├── queue/                         # Redis distributed simulation
-│   │   ├── consumer.py                # Worker: pops jobs, runs chunks
-│   │   └── producer.py                # Pushes jobs, collects results
-│   ├── api/                           # v3 FastAPI gateway
-│   │   ├── app.py                     # FastAPI application
-│   │   ├── simulations.py             # POST /submit, GET /{job_id}/results
-│   │   ├── ws.py                      # WS /simulations/{job_id} (multicore progress)
-│   │   ├── cache.py                   # Redis result cache
-│   │   └── schemas.py                 # Pydantic API request/response models
-│   └── testing/                       # Shared test doubles
-│       └── fakes.py                   # FakeRedis for unit tests
+│   └── queue/                         # Redis distributed simulation
+│       ├── consumer.py                # Worker: pops jobs, runs chunks
+│       └── producer.py                # Pushes jobs, collects results
 ├── tests/
 │   ├── conftest.py                    # Shared pytest fixtures
-│   ├── unit/                          # Fast tests (no external services)
-│   └── integration/                   # API TestClient + live Redis
+│   └── unit/                          # ECL engine + smoke tests
 ├── docker-compose.yml
 ├── Dockerfile
 ├── pyproject.toml
@@ -129,9 +106,8 @@ flowchart TB
 |-------------|-----------------|
 | **Python** | 3.13 or 3.14 (`>=3.13,<3.15`) |
 | **Poetry** | Latest — [install guide](https://python-poetry.org/docs/#installation) |
-| **Node.js** | 20+ — only needed for the frontend dashboard |
-| **Redis** | Optional locally; included in Docker Compose |
-| **Docker Desktop** | Optional — for containerized Redis, workers, and API |
+| **Redis** | Optional locally; only needed for distributed simulation. Included in Docker Compose |
+| **Docker Desktop** | Optional — for containerized Redis + workers |
 
 ---
 
@@ -159,22 +135,6 @@ python -m risk_engine.monte_carlo.vectorized_calc
 ---
 
 ## Quick start
-
-### Option A — Run the API + dashboard
-
-```bash
-# Terminal 1 — backend
-poetry run uvicorn risk_engine.api.app:app --app-dir src --reload --port 8080
-
-# Terminal 2 — frontend
-cd frontend
-npm install
-npm run dev
-```
-
-Open **http://localhost:3000**, pick a preset scenario, choose a method, and submit.
-
-### Option B — Monte Carlo simulation only (no API)
 
 ```bash
 # Fast vectorized run (override portfolio size for quick test)
@@ -221,7 +181,9 @@ All runners accept `--n-loans` to override `N_LOANS` from `.env`.
 poetry run python -m risk_engine.monte_carlo.vectorized_calc --n-loans 50000
 ```
 
-### Distributed simulation (Redis queue)
+---
+
+## Distributed simulation (Redis queue)
 
 Split a large portfolio across Redis workers:
 
@@ -237,110 +199,6 @@ The producer splits `N_LOANS` into `N_JOBS` chunks (default 10), pushes them to 
 
 ---
 
-## v3 simulation API
-
-Base URL: **http://localhost:8080**
-
-Interactive docs: **http://localhost:8080/docs** (Swagger UI)
-
-### `GET /health`
-
-Returns service status and Redis cache availability.
-
-```json
-{
-  "status": "ok",
-  "cache_enabled": true,
-  "cache_available": true
-}
-```
-
-`cache_available: false` means Redis is unreachable — the API still works, just without caching.
-
-### `POST /api/v3/simulations/submit`
-
-Submit macro coordinates and run a simulation.
-
-**Request body:**
-
-```json
-{
-  "unemployment_rate": 6.5,
-  "interest_rate": 5.25,
-  "housing_price_index": 95.0,
-  "n_loans": 1000000,
-  "method": "vectorized"
-}
-```
-
-| Field | Type | Valid range / values |
-|-------|------|----------------------|
-| `unemployment_rate` | float | 2.0 – 15.0 (percent) |
-| `interest_rate` | float | 0.0 – 12.0 (percent) |
-| `housing_price_index` | float | 70.0 – 130.0 (index level) |
-| `n_loans` | int | 1,000 – 100,000,000 |
-| `method` | string | `vectorized` \| `multicore` |
-
-- `vectorized` completes synchronously and returns `"status": "completed"`.
-- `multicore` runs in a background task and returns `"status": "queued"` with a `ws_url` for live progress.
-
-**Response (vectorized):**
-
-```json
-{
-  "job_id": "a1b2c3...",
-  "status": "completed",
-  "ws_url": null
-}
-```
-
-**Response (multicore):**
-
-```json
-{
-  "job_id": "a1b2c3...",
-  "status": "queued",
-  "ws_url": "/api/v3/ws/simulations/a1b2c3..."
-}
-```
-
-### `GET /api/v3/simulations/{job_id}/results`
-
-Fetch cached results. Returns `202` with `{"status": "running"}` while a multicore job is still in flight, `404` if the job is unknown, and `200` with the full `SimulationResults` payload once complete — including `ecl_distribution` (100 samples from different seeds) and `percentiles` (p5/p25/p50/p75/p95) for charting.
-
-### `WS /api/v3/ws/simulations/{job_id}`
-
-For `multicore` jobs, streams `progress` and `intermediate` events as chunks finish across cores, then a `final` event with the complete result. Completed jobs (including `vectorized`) get an immediate `final` event and the connection closes.
-
-```json
-{"type": "progress", "completed": 5000000, "total": 50000000, "elapsed_ms": 45}
-{"type": "intermediate", "defaults_so_far": 243000, "current_ecl": 27337500000}
-{"type": "final", "ecl": 5487562500, "defaults": 4878500, "default_rate": 0.04878, "elapsed_ms": 182}
-```
-
----
-
-## Frontend dashboard
-
-A Next.js dashboard lives in `frontend/` — see [`frontend/README.md`](frontend/README.md) for setup, structure, and usage. It submits scenarios to the v3 API, streams multicore progress over the WebSocket, and renders an ECL distribution histogram and hazard-rate heatmap.
-
----
-
-## Redis: job queue vs result cache
-
-Redis serves **two independent purposes** in this project:
-
-| Purpose | Key pattern | Used by | TTL |
-|---------|-------------|---------|-----|
-| **Simulation job queue** | `simulation_jobs`, `simulation_results` | `queue/producer.py`, `queue/consumer.py` | None (lists) |
-| **Simulation result cache** | `sim_result:{job_id}` | `api/cache.py`, FastAPI | 24 h (configurable) |
-
-They do not share keys. You can run the v3 API with Redis caching without running distributed simulation workers, and vice versa.
-
-**Inspect in RedisInsight:** http://localhost:8001 (when Redis is running via Docker)
-
----
-
 ## Docker
 
 **Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
@@ -352,12 +210,6 @@ They do not share keys. You can run the v3 API with Redis caching without runnin
 | `redis` | Redis Stack + RedisInsight | 6379, 8001 |
 | `worker` | Simulation consumer(s) | — |
 | `api` | Simulation **producer** (one-shot) | — |
-| `simulation-api` | v3 FastAPI gateway | 8080 |
-| `frontend` | Next.js dashboard | 3000 |
-
-> **Important:** The `api` service is the Monte Carlo simulation producer, **not** the FastAPI gateway. The gateway is `simulation-api`.
-
-### Monte Carlo distributed simulation
 
 ```bash
 # Build image
@@ -383,33 +235,13 @@ docker compose down
 docker compose up --build --scale worker=3
 ```
 
-### v3 API + dashboard
-
-```bash
-docker compose build
-docker compose up -d redis simulation-api frontend
-
-# Health check
-curl http://localhost:8080/health
-
-# Submit a simulation
-curl -X POST http://localhost:8080/api/v3/simulations/submit \
-  -H "Content-Type: application/json" \
-  -d '{"unemployment_rate": 6.5, "interest_rate": 5.25, "housing_price_index": 95.0, "n_loans": 1000000, "method": "vectorized"}'
-```
-
-Open http://localhost:3000 for the dashboard.
-
 ---
 
 ## Testing
 
 ```bash
-# All unit + integration tests (skips live Redis if down)
+# All unit tests
 poetry run python -m pytest
-
-# Exclude tests that need a running Redis instance
-poetry run python -m pytest -m "not integration"
 
 # Verbose output
 poetry run python -m pytest -v
@@ -417,14 +249,6 @@ poetry run python -m pytest -v
 # Single test file
 poetry run python -m pytest tests/unit/test_ecl_engine.py -v
 ```
-
-**Test layout:**
-
-| Directory | What it covers |
-|-----------|----------------|
-| `tests/unit/` | ECL engine, v3 simulation API, cache |
-| `tests/integration/` | FastAPI TestClient, live Redis round-trip |
-| `tests/conftest.py` | Shared fixtures: `api_client`, `FakeRedis` |
 
 ---
 
@@ -461,8 +285,6 @@ All settings load from `.env` in the project root via `risk_engine.config`. Copy
 |----------|---------|-------------|
 | `REDIS_HOST` | `localhost` | Redis hostname |
 | `REDIS_PORT` | `6379` | Redis port |
-| `ECL_CACHE_ENABLED` | `true` | Enable simulation result cache |
-| `ECL_CACHE_TTL` | `86400` | Cache TTL in seconds (24 h) |
 
 ### Artifact paths (convention, not env vars)
 
@@ -474,27 +296,13 @@ All settings load from `.env` in the project root via `risk_engine.config`. Copy
 
 ## Troubleshooting
 
-### Port 8080 already in use (WinError 10048)
-
-Another process (or a previous uvicorn instance) holds the port. Stop it or use a different port:
-
-```bash
-poetry run uvicorn risk_engine.api.app:app --app-dir src --port 8081
-```
-
-### Redis cache not working locally
-
-- Start Redis: `docker compose up -d redis`
-- Check health: `GET /health` → `cache_available: true`
-- API works without Redis — caching is optional
-
 ### Docker: "cannot connect to Docker Desktop"
 
 Start Docker Desktop and wait until the tray icon shows it's ready.
 
-### Multicore job stuck at "running"
+### `queue/producer.py` times out waiting for results
 
-`GET /{job_id}/results` returns `202` while the background task is still executing — connect to the WebSocket (`ws_url` from the submit response) for live progress, or keep polling.
+No consumers are running, or they can't reach Redis. Start at least one worker: `poetry run python -m risk_engine.queue.consumer`, and confirm `REDIS_HOST`/`REDIS_PORT` in `.env` match the running Redis instance.
 
 ---
 
@@ -514,16 +322,14 @@ Installed via Poetry (`[tool.poetry] packages = [{ include = "risk_engine", from
 
 | Decision | Rationale |
 |----------|-----------|
-| Separate Redis cache keys | Avoids collision with simulation job queues |
 | `queue/` not `redis/` | Avoids import collision with PyPI `redis` package |
-| Multicore streams over WebSocket | Keeps `/submit` responsive for large portfolios |
+| Four execution strategies | Naive/vectorized/multicore/Redis-distributed let you directly compare runtime at scale |
 
 ### Dependencies
 
 | Package | Role |
 |---------|------|
 | `numpy` | Simulation math |
-| `fastapi`, `uvicorn` | REST + WebSocket API |
-| `redis` | Job queue + result cache |
+| `redis` | Distributed job queue |
 | `python-dotenv` | `.env` loading |
-| `pytest`, `httpx` (dev) | Tests + FastAPI TestClient |
+| `pytest` (dev) | Tests |

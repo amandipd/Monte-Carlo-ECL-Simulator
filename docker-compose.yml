@@ -20,7 +20,7 @@ services:
       REDIS_PORT: "6379"
     command: python -m risk_engine.queue.consumer
 
-  # Monte Carlo simulation producer (pushes jobs to Redis workers — not the ML API)
+  # Monte Carlo simulation producer (pushes jobs to Redis workers).
   api:
     build: .
     depends_on:
@@ -30,45 +30,3 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
     command: python -m risk_engine.queue.producer
-
-  simulation-api:
-    build: .
-    depends_on:
-      redis:
-        condition: service_healthy
-    ports:
-      - "8080:8080"
-    environment:
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      ECL_CACHE_ENABLED: "true"
-      ECL_CACHE_TTL: "86400"
-    command: uvicorn risk_engine.api.app:app --host 0.0.0.0 --port 8080 --app-dir src
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  # Next.js dashboard (Quant-as-a-Service frontend).
-  frontend:
-    image: node:20-slim
-    working_dir: /app
-    depends_on:
-      - simulation-api
-    ports:
-      - "3000:3000"
-    environment:
-      # Browser runs on the host, so it reaches the API via the mapped host port.
-      NEXT_PUBLIC_API_BASE: http://localhost:8080
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: sh -c "npm install && npm run dev"
