@@ -1,14 +1,12 @@
 """v3 simulation routes.
 
-Mounted at ``/api/v3/simulations`` in the main app (see section 2.1 of
-CURSOR_PROMPT.md).
+Mounted at ``/api/v3/simulations`` in the main app.
 
 Endpoints:
 - ``POST /submit``  — run a simulation and cache the results
 - ``GET  /{job_id}/results`` — fetch cached results
 
 Method dispatch:
-- ``surrogate``  → ``SurrogatePredictor.predict_ecl()`` (synchronous, <1ms)
 - ``vectorized`` → ``simulate_defaults()`` (synchronous)
 - ``multicore``  → ``simulation_chunk()`` fanned out over cores in a
   ``BackgroundTasks`` job; results are written to the cache when done.
@@ -23,7 +21,6 @@ import numpy as np
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from risk_engine.config import AVG_EXPOSURE, LGD
 from risk_engine.monte_carlo.ecl_engine import (
     clip_macro_inputs,
     compute_ecl,
@@ -33,8 +30,7 @@ from risk_engine.monte_carlo.ecl_engine import (
     simulate_defaults,
 )
 from risk_engine.monte_carlo.multicore_calc import N_CORES, simulation_chunk
-from risk_engine.surrogate.cache import ECLCache
-from risk_engine.surrogate.inference import SurrogatePredictor
+from risk_engine.api.cache import ECLCache
 from risk_engine.api.schemas import (
     SimulationResults,
     SimulationSubmitRequest,
@@ -135,34 +131,6 @@ def _build_payload(
         "ecl_distribution": ecl_distribution,
         "percentiles": percentiles,
     }
-
-
-def _run_surrogate(
-    predictor: SurrogatePredictor,
-    job_id: str,
-    unemployment: float,
-    interest_rate: float,
-    hpi: float,
-    n_loans: int,
-) -> dict:
-    start = time.perf_counter()
-    ecl = predictor.predict_ecl(unemployment, interest_rate, hpi)
-    elapsed_ms = (time.perf_counter() - start) * 1000
-    # Back out an implied default count so ECL and defaults stay consistent.
-    defaults = int(round(ecl / (AVG_EXPOSURE * LGD))) if AVG_EXPOSURE and LGD else 0
-    # Surrogate is deterministic (no seed), so there is no distribution to show.
-    return _build_payload(
-        job_id=job_id,
-        method="surrogate",
-        unemployment=unemployment,
-        interest_rate=interest_rate,
-        hpi=hpi,
-        n_loans=n_loans,
-        defaults=defaults,
-        ecl=ecl,
-        elapsed_ms=elapsed_ms,
-        ecl_distribution=None,
-    )
 
 
 def _run_vectorized(
@@ -296,20 +264,6 @@ async def submit_simulation(
     )
     job_id = uuid.uuid4().hex
     key = _result_key(job_id)
-
-    if request_body.method == "surrogate":
-        predictor: SurrogatePredictor = request.app.state.predictor
-        try:
-            payload = _run_surrogate(
-                predictor, job_id, unemployment, interest_rate, hpi,
-                request_body.n_loans,
-            )
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(
-                status_code=500, detail=f"Surrogate inference failed: {exc}"
-            ) from exc
-        cache.set_json(key, payload)
-        return SimulationSubmitResponse(job_id=job_id, status="completed")
 
     if request_body.method == "vectorized":
         try:

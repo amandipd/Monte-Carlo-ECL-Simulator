@@ -4,7 +4,6 @@ import { formatCurrency, formatInt, formatPercent } from "@/lib/utils";
 const METHOD_LABELS: Record<string, string> = {
   vectorized: "Vectorized NumPy",
   multicore: "Multicore (ProcessPool)",
-  surrogate: "Neural Surrogate",
 };
 
 function Metric({

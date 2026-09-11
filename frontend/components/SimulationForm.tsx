@@ -35,7 +35,6 @@ const PRESETS: {
 const METHODS: { id: SimulationMethod; label: string; hint: string }[] = [
   { id: "vectorized", label: "Vectorized NumPy", hint: "Single-process Monte Carlo, synchronous" },
   { id: "multicore", label: "Multicore", hint: "ProcessPool + live WebSocket progress" },
-  { id: "surrogate", label: "Neural Surrogate", hint: "PyTorch MLP, <1ms inference" },
 ];
 
 // n_loans slider works on a log10 scale: 1K (10^3) → 100M (10^8).

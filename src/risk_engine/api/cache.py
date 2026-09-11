@@ -1,25 +1,9 @@
-"""Redis cache for surrogate ECL predictions (separate from simulation job queues)."""
+"""Redis cache for simulation results (separate from Redis-distributed job queues)."""
 import json
-import time
 
 import redis
 
 from risk_engine.config import ECL_CACHE_ENABLED, ECL_CACHE_TTL, REDIS_HOST, REDIS_PORT
-
-CACHE_KEY_PREFIX = "ecl_cache"
-
-def format_cache_key(
-    unemployment: float,
-    interest_rate: float,
-    housing_price_index: float,
-) -> str:
-    """Build a deterministic Redis key from clipped macro coordinates."""
-    return (
-        f"{CACHE_KEY_PREFIX}:"
-        f"{round(unemployment, 2)}:"
-        f"{round(interest_rate, 2)}:"
-        f"{round(housing_price_index, 2)}"
-    )
 
 class ECLCache:
     """Optional Redis cache for predicted ECL values."""
@@ -60,58 +44,11 @@ class ECLCache:
     def available(self) -> bool:
         return self.enabled and self._available and self._client is not None
 
-    def get(
-        self,
-        unemployment: float,
-        interest_rate: float,
-        housing_price_index: float,
-    ) -> float | None:
-        if not self.available:
-            return None
-
-        key = format_cache_key(unemployment, interest_rate, housing_price_index)
-        try:
-            raw = self._client.get(key)
-        except redis.RedisError:
-            self._available = False
-            return None
-
-        if raw is None:
-            return None
-
-        try:
-            payload = json.loads(raw)
-            return float(payload["predicted_ecl"])
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-            return None
-
-    def set(
-        self,
-        unemployment: float,
-        interest_rate: float,
-        housing_price_index: float,
-        predicted_ecl: float,
-    ) -> None:
-        if not self.available:
-            return
-
-        key = format_cache_key(unemployment, interest_rate, housing_price_index)
-        payload = json.dumps(
-            {
-                "predicted_ecl": predicted_ecl,
-                "timestamp": time.time(),
-            }
-        )
-        try:
-            self._client.setex(key, self.ttl_seconds, payload)
-        except redis.RedisError:
-            self._available = False
-
     def get_json(self, key: str) -> dict | None:
         """Fetch and decode a JSON payload stored under an arbitrary key.
 
-        Used for non-macro-keyed entries such as ``sim_result:{job_id}`` and
-        cached chat responses. Degrades gracefully when Redis is unavailable.
+        Used for entries such as ``sim_result:{job_id}``. Degrades gracefully
+        when Redis is unavailable.
         """
         if not self.available:
             return None

@@ -1,34 +1,26 @@
-"""Tests for Redis ECL prediction cache."""
-import json
+"""Tests for the Redis simulation-results cache."""
 
-from risk_engine.surrogate.cache import ECLCache, format_cache_key
+from risk_engine.api.cache import ECLCache
 from risk_engine.testing.fakes import FakeRedis
 
-def test_format_cache_key_is_deterministic():
-    assert format_cache_key(6.5, 5.25, 95.0) == "ecl_cache:6.5:5.25:95.0"
-    assert format_cache_key(6.501, 5.249, 95.004) == "ecl_cache:6.5:5.25:95.0"
-
-def test_cache_get_miss_when_empty():
+def test_cache_get_json_miss_when_empty():
     cache = ECLCache(enabled=True, ttl_seconds=3600, redis_client=FakeRedis())
-    assert cache.get(4.0, 3.0, 100.0) is None
+    assert cache.get_json("sim_result:missing") is None
 
-def test_cache_set_and_get_round_trip():
+def test_cache_set_and_get_json_round_trip():
     fake = FakeRedis()
     cache = ECLCache(enabled=True, ttl_seconds=86400, redis_client=fake)
 
-    cache.set(6.5, 5.25, 95.0, 4_307_526_656.0)
-    assert cache.get(6.5, 5.25, 95.0) == 4_307_526_656.0
+    payload = {"job_id": "abc123", "ecl": 4_307_526_656.0}
+    cache.set_json("sim_result:abc123", payload)
 
-    key = format_cache_key(6.5, 5.25, 95.0)
-    payload = json.loads(fake.store[key])
-    assert payload["predicted_ecl"] == 4_307_526_656.0
-    assert "timestamp" in payload
-    assert fake.ttl[key] == 86400
+    assert cache.get_json("sim_result:abc123") == payload
+    assert fake.ttl["sim_result:abc123"] == 86400
 
 def test_cache_disabled_skips_reads_and_writes():
     fake = FakeRedis()
     cache = ECLCache(enabled=False, ttl_seconds=86400, redis_client=fake)
 
-    cache.set(4.0, 3.0, 100.0, 1.0)
-    assert cache.get(4.0, 3.0, 100.0) is None
+    cache.set_json("sim_result:abc123", {"ecl": 1.0})
+    assert cache.get_json("sim_result:abc123") is None
     assert fake.store == {}

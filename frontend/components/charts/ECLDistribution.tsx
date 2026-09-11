@@ -71,9 +71,7 @@ export default function ECLDistribution({
     return (
       <Shell>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          The surrogate is deterministic, so there is no sampling distribution.
-          Distribution charts are available for the vectorized and multicore
-          Monte Carlo methods.
+          No sampling distribution available for this simulation.
         </p>
       </Shell>
     );

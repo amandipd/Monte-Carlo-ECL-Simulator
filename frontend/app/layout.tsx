@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Quant-as-a-Service · ECL Dashboard",
   description:
-    "Monte Carlo Expected Credit Loss simulator with a PyTorch neural surrogate.",
+    "Monte Carlo Expected Credit Loss simulator.",
 };
 
 export default function RootLayout({

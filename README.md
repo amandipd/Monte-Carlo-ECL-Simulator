@@ -1,13 +1,13 @@
-# Monte Carlo Expected Credit Loss Simulator with PyTorch Neural Surrogate
+# Monte Carlo Expected Credit Loss Simulator
 
 A quantitative credit-risk system that forecasts **Expected Credit Loss (ECL)** on large loan portfolios under macroeconomic stress. It combines:
 
 - **Monte Carlo simulation** (vectorized NumPy, multi-core, and Redis-distributed workers)
-- A **PyTorch neural surrogate** that approximates the simulator in milliseconds
-- A **FastAPI gateway** with optional **Ollama** (free, local LLM) for natural-language stress scenarios and executive reports
-- **Redis caching** for repeated inference requests
+- A **FastAPI gateway** (v3) that runs simulations synchronously or streams multicore progress over a WebSocket
+- **Redis caching** of simulation results
+- A **Next.js dashboard** for submitting scenarios and visualizing results
 
-The original TypeScript prototype (branch `v1-typescript-prototype`) validated core PD/LGD math. This branch adds Python vectorization, distributed execution, ML acceleration, and an agent layer for plain-English scenario testing.
+The original TypeScript prototype (branch `v1-typescript-prototype`) validated core PD/LGD math. This branch adds Python vectorization, distributed execution, and a web dashboard.
 
 ---
 
@@ -19,15 +19,14 @@ The original TypeScript prototype (branch `v1-typescript-prototype`) validated c
 4. [Installation](#installation)
 5. [Quick start](#quick-start)
 6. [Monte Carlo simulation engine](#monte-carlo-simulation-engine)
-7. [ML surrogate pipeline](#ml-surrogate-pipeline)
-8. [REST API reference](#rest-api-reference)
-9. [Ollama (local LLM)](#ollama-local-llm)
-10. [Redis: job queue vs ECL cache](#redis-job-queue-vs-ecl-cache)
-11. [Docker](#docker)
-12. [Testing & validation](#testing--validation)
-13. [Configuration reference](#configuration-reference)
-14. [Troubleshooting](#troubleshooting)
-15. [Development notes](#development-notes)
+7. [v3 simulation API](#v3-simulation-api)
+8. [Frontend dashboard](#frontend-dashboard)
+9. [Redis: job queue vs result cache](#redis-job-queue-vs-result-cache)
+10. [Docker](#docker)
+11. [Testing](#testing)
+12. [Configuration reference](#configuration-reference)
+13. [Troubleshooting](#troubleshooting)
+14. [Development notes](#development-notes)
 
 ---
 
@@ -36,8 +35,7 @@ The original TypeScript prototype (branch `v1-typescript-prototype`) validated c
 ```mermaid
 flowchart TB
     subgraph inputs [Inputs]
-        NUM[Numeric macro coords]
-        NL[Natural-language scenario]
+        FORM[Dashboard form / API client]
     end
 
     subgraph engine [Monte Carlo Engine]
@@ -45,45 +43,37 @@ flowchart TB
         MC[Vectorized / multicore / Redis workers]
     end
 
-    subgraph ml [ML Surrogate]
-        CSV[synthetic_ecl_dataset.csv]
-        TRAIN[PyTorch MLP train]
-        MODEL[surrogate_v1.pt + scaler_v1.pkl]
+    subgraph api [FastAPI Gateway - v3]
+        SUBMIT["POST /api/v3/simulations/submit"]
+        RESULTS["GET /api/v3/simulations/{job_id}/results"]
+        WS["WS /api/v3/ws/simulations/{job_id}"]
+        CACHE[(Redis result cache)]
     end
 
-    subgraph api [FastAPI Gateway]
-        PREDICT["POST /api/v2/predict"]
-        SHOCK["POST /api/v2/predict_shock"]
-        CACHE[(Redis ECL cache)]
+    subgraph fe [Next.js Dashboard]
+        UI[SimulationForm + charts]
     end
 
-    subgraph llm [Ollama - local LLM]
-        TRANS[Scenario → macro JSON]
-        REPORT[Executive summary]
-    end
-
-    ECL --> CSV
-    CSV --> TRAIN --> MODEL
-    MODEL --> PREDICT
-    MODEL --> SHOCK
-
-    NUM --> PREDICT
-    NL --> TRANS --> SHOCK
-    SHOCK --> REPORT
-
-    PREDICT --> CACHE
-    SHOCK --> CACHE
+    FORM --> SUBMIT
+    SUBMIT --> ECL
+    SUBMIT --> MC
+    SUBMIT --> CACHE
+    MC --> WS
+    WS --> CACHE
+    RESULTS --> CACHE
+    UI --> SUBMIT
+    UI --> RESULTS
+    UI --> WS
 ```
 
 **Data flow summary**
 
 | Stage | What happens |
 |-------|--------------|
-| **Label generation** | Sample macro scenarios → run Monte Carlo `compute_ecl()` → write CSV |
-| **Training** | Train a 3→64→32→1 MLP with feature + label scaling → save artifacts to `models/` |
-| **Numeric inference** | Clip macro inputs → scale → forward pass → inverse-scale → ECL in ~1 ms |
-| **Shock inference** | Ollama translates scenario text → same surrogate → Ollama writes report |
-| **Caching** | Identical macro coords hit Redis (`ecl_cache:*`) for 24 h, skipping the model |
+| **Submit** | Client posts macro coordinates + method → `POST /api/v3/simulations/submit` |
+| **Compute** | `vectorized` runs synchronously; `multicore` fans chunks across `ProcessPoolExecutor` in a background task and streams progress over the WebSocket |
+| **Cache** | Completed results are written to Redis under `sim_result:{job_id}` |
+| **Fetch** | Client polls `GET /api/v3/simulations/{job_id}/results` or reads the WebSocket's `final` event |
 
 ---
 
@@ -91,21 +81,17 @@ flowchart TB
 
 ```
 .
-├── data/                              # Generated datasets (CSV gitignored)
-│   └── synthetic_ecl_dataset.csv
-├── models/                            # Trained artifacts (gitignored)
-│   ├── surrogate_v1.pt                # PyTorch weights
-│   └── scaler_v1.pkl                # Feature + label StandardScalers
 ├── results/                           # Simulation output text files
 │   ├── naive_results.txt
 │   ├── vectorized_results.txt
 │   ├── multicore_results.txt
 │   ├── redis_results.txt
 │   └── all_results.txt
-├── scripts/
-│   ├── validate_pipeline.py           # End-to-end smoke test
-│   ├── validate_pipeline.ps1          # Windows: pytest + pipeline
-│   └── validate_pipeline.sh           # Bash equivalent
+├── frontend/                          # Next.js dashboard
+│   ├── app/                           # Landing page + dashboard/[jobId] route
+│   ├── components/                    # SimulationForm, charts, skeletons
+│   ├── hooks/                         # useSimulation, useWebSocket
+│   └── lib/                           # API client, types, formatting
 ├── src/risk_engine/                   # Main installable Python package
 │   ├── config.py                      # .env loading, path constants, bounds
 │   ├── monte_carlo/                   # Core ECL engine + simulators
@@ -117,23 +103,12 @@ flowchart TB
 │   ├── queue/                         # Redis distributed simulation
 │   │   ├── consumer.py                # Worker: pops jobs, runs chunks
 │   │   └── producer.py                # Pushes jobs, collects results
-│   ├── surrogate/                     # ML surrogate + API + LLM agent
+│   ├── api/                           # v3 FastAPI gateway
 │   │   ├── app.py                     # FastAPI application
-│   │   ├── model.py                   # ECLSurrogate MLP definition
-│   │   ├── generate_training_data.py  # Monte Carlo → CSV labels
-│   │   ├── validate_dataset.py        # Dataset quality checks
-│   │   ├── train.py                   # Training loop + early stopping
-│   │   ├── evaluate.py                # Validation gates + spot-checks
-│   │   ├── inference.py               # Load model, predict ECL
-│   │   ├── cache.py                   # Redis ECL prediction cache
-│   │   ├── agentic_translator.py      # Scenario text → macro coords
-│   │   ├── report_synthesizer.py      # Macro + ECL → executive summary
-│   │   ├── llm_client.py              # Ollama HTTP client
-│   │   ├── prompts.py                 # LLM system/user prompts
-│   │   ├── schemas.py                 # Pydantic API request/response models
-│   │   ├── sampling.py                # Latin hypercube macro sampling
-│   │   ├── dataset.py                 # PyTorch Dataset wrapper
-│   │   └── scalers.py                 # Feature/label scaler I/O
+│   │   ├── simulations.py             # POST /submit, GET /{job_id}/results
+│   │   ├── ws.py                      # WS /simulations/{job_id} (multicore progress)
+│   │   ├── cache.py                   # Redis result cache
+│   │   └── schemas.py                 # Pydantic API request/response models
 │   └── testing/                       # Shared test doubles
 │       └── fakes.py                   # FakeRedis for unit tests
 ├── tests/
@@ -152,10 +127,10 @@ flowchart TB
 
 | Requirement | Version / notes |
 |-------------|-----------------|
-| **Python** | 3.13 or 3.14 (`>=3.13,<3.15` — required by PyTorch) |
+| **Python** | 3.13 or 3.14 (`>=3.13,<3.15`) |
 | **Poetry** | Latest — [install guide](https://python-poetry.org/docs/#installation) |
+| **Node.js** | 20+ — only needed for the frontend dashboard |
 | **Redis** | Optional locally; included in Docker Compose |
-| **Ollama** | Optional — free local LLM for `/predict_shock` |
 | **Docker Desktop** | Optional — for containerized Redis, workers, and API |
 
 ---
@@ -165,9 +140,6 @@ flowchart TB
 From the project root:
 
 ```bash
-# Clone and enter the repo (from the project root)
-cd monte-carlo-ecl-simulator-pytorch-surrogate
-
 # Install dependencies + the risk_engine package
 poetry install
 
@@ -175,7 +147,7 @@ poetry install
 cp .env.example .env   # Windows: copy .env.example .env
 ```
 
-`poetry install` registers the `risk_engine` package (Poetry project: `monte-carlo-ecl-simulator-pytorch-surrogate`). All commands below use `python -m risk_engine...` — no manual `PYTHONPATH` setup required.
+`poetry install` registers the `risk_engine` package. All commands below use `python -m risk_engine...` — no manual `PYTHONPATH` setup required.
 
 **Optional:** activate the virtual environment to drop the `poetry run` prefix:
 
@@ -188,33 +160,21 @@ python -m risk_engine.monte_carlo.vectorized_calc
 
 ## Quick start
 
-### Option A — Full ML pipeline (recommended first run)
+### Option A — Run the API + dashboard
 
 ```bash
-# 1. Generate 1000 labeled scenarios (~few minutes with default N_LOANS)
-poetry run python -m risk_engine.surrogate.generate_training_data
+# Terminal 1 — backend
+poetry run uvicorn risk_engine.api.app:app --app-dir src --reload --port 8080
 
-# 2. Train the surrogate
-poetry run python -m risk_engine.surrogate.train
-
-# 3. Verify model quality (must pass MAE < 5% gate)
-poetry run python -m risk_engine.surrogate.evaluate
-
-# 4. Start the API
-poetry run uvicorn risk_engine.surrogate.app:app --app-dir src --reload --port 8080
+# Terminal 2 — frontend
+cd frontend
+npm install
+npm run dev
 ```
 
-Open **http://localhost:8080/docs** and try `POST /api/v2/predict` with:
+Open **http://localhost:3000**, pick a preset scenario, choose a method, and submit.
 
-```json
-{
-  "unemployment_rate": 6.5,
-  "interest_rate": 5.25,
-  "housing_price_index": 95.0
-}
-```
-
-### Option B — Monte Carlo simulation only
+### Option B — Monte Carlo simulation only (no API)
 
 ```bash
 # Fast vectorized run (override portfolio size for quick test)
@@ -222,16 +182,6 @@ poetry run python -m risk_engine.monte_carlo.vectorized_calc --n-loans 1000000
 ```
 
 Results are written to `results/vectorized_results.txt`.
-
-### Option C — One-command validation
-
-```bash
-# Runs pytest + full generate → train → evaluate → API smoke test
-poetry run python scripts/validate_pipeline.py
-
-# Windows wrapper (pytest + pipeline)
-./scripts/validate_pipeline.ps1
-```
 
 ---
 
@@ -287,98 +237,7 @@ The producer splits `N_LOANS` into `N_JOBS` chunks (default 10), pushes them to 
 
 ---
 
-## ML surrogate pipeline
-
-The surrogate learns to approximate `compute_ecl()` from three macro inputs. Training labels come from the real Monte Carlo engine — not synthetic guesses.
-
-### Step-by-step
-
-#### 1. Generate training data
-
-```bash
-poetry run python -m risk_engine.surrogate.generate_training_data \
-  --n-samples 1000 \
-  --n-loans 500000 \
-  --seed 42 \
-  --method latin_hypercube
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--n-samples` | `1000` | Number of macro scenarios |
-| `--n-loans` | `500000` | Loans per label simulation |
-| `--output` | `data/synthetic_ecl_dataset.csv` | Output CSV path |
-| `--seed` | `42` | Reproducibility seed |
-| `--method` | `latin_hypercube` | `latin_hypercube` or `uniform` |
-
-**Output schema:** `unemployment_rate`, `interest_rate`, `housing_price_index`, `expected_credit_loss`
-
-#### 2. Validate dataset
-
-```bash
-poetry run python -m risk_engine.surrogate.validate_dataset \
-  --input data/synthetic_ecl_dataset.csv \
-  --expected-rows 1000 \
-  --n-loans 500000
-```
-
-Checks row count, NaNs, feature ranges, label distribution, and spot-checks rows against `compute_ecl()`.
-
-#### 3. Train
-
-```bash
-poetry run python -m risk_engine.surrogate.train \
-  --epochs 500 \
-  --batch-size 32 \
-  --patience 30
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dataset` | `data/synthetic_ecl_dataset.csv` | Training CSV |
-| `--model-out` | `models/surrogate_v1.pt` | Model weights output |
-| `--scaler-out` | `models/scaler_v1.pkl` | Scaler artifact output |
-| `--epochs` | `500` | Max training epochs |
-| `--batch-size` | `32` | Mini-batch size |
-| `--lr` | `0.001` | Learning rate |
-| `--patience` | `30` | Early stopping patience |
-| `--seed` | `42` | Random seed |
-
-**Model architecture:** MLP `3 → 64 → 32 → 1` with ReLU activations. Both feature and label `StandardScaler` are saved (label scaling is critical for billion-scale ECL values).
-
-#### 4. Evaluate
-
-```bash
-poetry run python -m risk_engine.surrogate.evaluate
-```
-
-Validation gates (must pass before deploying):
-
-| Gate | Default threshold | What it checks |
-|------|-------------------|----------------|
-| Val MAE ratio | < 5% (`EVAL_MAE_THRESHOLD`) | Mean absolute error vs mean ECL |
-| Spot-checks | < 10% error (`EVAL_SPOT_CHECK_TOLERANCE`) | Random rows vs live `compute_ecl()` |
-
-Typical production result: **~0.45% val MAE ratio**.
-
-#### 5. CLI inference (without API)
-
-```bash
-poetry run python -m risk_engine.surrogate.inference \
-  --unemployment 6.5 --interest 5.25 --hpi 95
-```
-
-#### 6. Start API
-
-```bash
-poetry run uvicorn risk_engine.surrogate.app:app --app-dir src --reload --port 8080
-```
-
-Requires `models/surrogate_v1.pt` and `models/scaler_v1.pkl` to exist.
-
----
-
-## REST API reference
+## v3 simulation API
 
 Base URL: **http://localhost:8080**
 
@@ -387,8 +246,6 @@ Interactive docs: **http://localhost:8080/docs** (Swagger UI)
 ### `GET /health`
 
 Returns service status and Redis cache availability.
-
-**Response:**
 
 ```json
 {
@@ -400,11 +257,9 @@ Returns service status and Redis cache availability.
 
 `cache_available: false` means Redis is unreachable — the API still works, just without caching.
 
----
+### `POST /api/v3/simulations/submit`
 
-### `POST /api/v2/predict`
-
-Predict portfolio ECL from numeric macro coordinates.
+Submit macro coordinates and run a simulation.
 
 **Request body:**
 
@@ -412,156 +267,75 @@ Predict portfolio ECL from numeric macro coordinates.
 {
   "unemployment_rate": 6.5,
   "interest_rate": 5.25,
-  "housing_price_index": 95.0
+  "housing_price_index": 95.0,
+  "n_loans": 1000000,
+  "method": "vectorized"
 }
 ```
 
-| Field | Type | Valid range (default) |
+| Field | Type | Valid range / values |
 |-------|------|----------------------|
 | `unemployment_rate` | float | 2.0 – 15.0 (percent) |
 | `interest_rate` | float | 0.0 – 12.0 (percent) |
 | `housing_price_index` | float | 70.0 – 130.0 (index level) |
+| `n_loans` | int | 1,000 – 100,000,000 |
+| `method` | string | `vectorized` \| `multicore` |
 
-**Response:**
+- `vectorized` completes synchronously and returns `"status": "completed"`.
+- `multicore` runs in a background task and returns `"status": "queued"` with a `ws_url` for live progress.
+
+**Response (vectorized):**
 
 ```json
 {
-  "input_macro_coordinates": {
-    "unemployment_rate": 6.5,
-    "interest_rate": 5.25,
-    "housing_price_index": 95.0
-  },
-  "predicted_ecl": 4307526656.0,
-  "inference_ms": 1.2,
-  "cached": false
+  "job_id": "a1b2c3...",
+  "status": "completed",
+  "ws_url": null
 }
 ```
 
-Repeat the same request to get `"cached": true` and `"inference_ms": 0.0` (Redis hit).
+**Response (multicore):**
 
-**PowerShell example:**
-
-```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v2/predict" `
-  -ContentType "application/json" `
-  -Body '{"unemployment_rate": 6.5, "interest_rate": 5.25, "housing_price_index": 95.0}'
+```json
+{
+  "job_id": "a1b2c3...",
+  "status": "queued",
+  "ws_url": "/api/v3/ws/simulations/a1b2c3..."
+}
 ```
 
-**curl example:**
+### `GET /api/v3/simulations/{job_id}/results`
 
-```bash
-curl -X POST http://localhost:8080/api/v2/predict \
-  -H "Content-Type: application/json" \
-  -d '{"unemployment_rate": 6.5, "interest_rate": 5.25, "housing_price_index": 95.0}'
+Fetch cached results. Returns `202` with `{"status": "running"}` while a multicore job is still in flight, `404` if the job is unknown, and `200` with the full `SimulationResults` payload once complete — including `ecl_distribution` (100 samples from different seeds) and `percentiles` (p5/p25/p50/p75/p95) for charting.
+
+### `WS /api/v3/ws/simulations/{job_id}`
+
+For `multicore` jobs, streams `progress` and `intermediate` events as chunks finish across cores, then a `final` event with the complete result. Completed jobs (including `vectorized`) get an immediate `final` event and the connection closes.
+
+```json
+{"type": "progress", "completed": 5000000, "total": 50000000, "elapsed_ms": 45}
+{"type": "intermediate", "defaults_so_far": 243000, "current_ecl": 27337500000}
+{"type": "final", "ecl": 5487562500, "defaults": 4878500, "default_rate": 0.04878, "elapsed_ms": 182}
 ```
 
 ---
 
-### `POST /api/v2/predict_shock`
+## Frontend dashboard
 
-Accept a natural-language crisis scenario, translate to macro coords via Ollama, predict ECL, and generate an executive summary.
-
-**Request body:**
-
-```json
-{
-  "scenario_description": "Severe recession with unemployment spiking and a housing market crash"
-}
-```
-
-**Response:**
-
-```json
-{
-  "input_macro_coordinates": {
-    "unemployment_rate": 12.2,
-    "interest_rate": 10.8,
-    "housing_price_index": 70.0
-  },
-  "predicted_ecl": 9861926912.0,
-  "executive_summary": "### Executive Summary\n\nThe severe recession scenario...",
-  "inference_ms": 1.5,
-  "cached": false
-}
-```
-
-**PowerShell — print full summary** (table view truncates long text):
-
-```powershell
-$r = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v2/predict_shock" `
-  -ContentType "application/json" `
-  -Body '{"scenario_description": "Severe recession with unemployment spiking and a housing crash"}'
-
-$r.executive_summary
-$r | ConvertTo-Json -Depth 5
-```
-
-**Note:** Two Ollama calls run per request (translation + report). First call may take 10–60+ seconds while the model loads. `inference_ms` covers only the PyTorch surrogate, not LLM time.
-
-**HTTP status codes:**
-
-| Code | Meaning |
-|------|---------|
-| `200` | Success |
-| `422` | Invalid request body (out-of-range macro values on `/predict`) |
-| `503` | Ollama unreachable or returned invalid JSON |
-| `500` | Model inference failure |
+A Next.js dashboard lives in `frontend/` — see [`frontend/README.md`](frontend/README.md) for setup, structure, and usage. It submits scenarios to the v3 API, streams multicore progress over the WebSocket, and renders an ECL distribution histogram and hazard-rate heatmap.
 
 ---
 
-## Ollama (local LLM)
-
-The shock endpoint uses **[Ollama](https://ollama.com)** — a free, locally hosted LLM. No paid API key required.
-
-### Setup
-
-1. Install Ollama from [ollama.com](https://ollama.com)
-2. Pull a model:
-   ```bash
-   ollama pull llama3.2
-   ```
-3. Verify it works:
-   ```bash
-   ollama run llama3.2 "Say hello in one sentence."
-   ```
-4. In `.env`:
-   ```
-   LLM_MOCK=false
-   OLLAMA_MODEL=llama3.2
-   ```
-5. Restart the API server
-
-### Mock mode (no Ollama needed)
-
-Set in `.env`:
-
-```
-LLM_MOCK=true
-```
-
-Uses keyword-based macro translation and a template executive summary. Useful for tests and offline development.
-
-### Other free models
-
-```bash
-ollama pull mistral
-ollama pull phi3
-```
-
-Then set `OLLAMA_MODEL=mistral` (or your choice) in `.env`.
-
----
-
-## Redis: job queue vs ECL cache
+## Redis: job queue vs result cache
 
 Redis serves **two independent purposes** in this project:
 
 | Purpose | Key pattern | Used by | TTL |
 |---------|-------------|---------|-----|
 | **Simulation job queue** | `simulation_jobs`, `simulation_results` | `queue/producer.py`, `queue/consumer.py` | None (lists) |
-| **ECL inference cache** | `ecl_cache:{u}:{i}:{hpi}` | `surrogate/cache.py`, FastAPI | 24 h (configurable) |
+| **Simulation result cache** | `sim_result:{job_id}` | `api/cache.py`, FastAPI | 24 h (configurable) |
 
-They do not share keys. You can run the surrogate API with Redis caching without running simulation workers, and vice versa.
+They do not share keys. You can run the v3 API with Redis caching without running distributed simulation workers, and vice versa.
 
 **Inspect in RedisInsight:** http://localhost:8001 (when Redis is running via Docker)
 
@@ -578,9 +352,10 @@ They do not share keys. You can run the surrogate API with Redis caching without
 | `redis` | Redis Stack + RedisInsight | 6379, 8001 |
 | `worker` | Simulation consumer(s) | — |
 | `api` | Simulation **producer** (one-shot) | — |
-| `surrogate-api` | ML FastAPI gateway | 8080 |
+| `simulation-api` | v3 FastAPI gateway | 8080 |
+| `frontend` | Next.js dashboard | 3000 |
 
-> **Important:** The `api` service is the Monte Carlo simulation producer, **not** the ML gateway. The ML gateway is `surrogate-api`.
+> **Important:** The `api` service is the Monte Carlo simulation producer, **not** the FastAPI gateway. The gateway is `simulation-api`.
 
 ### Monte Carlo distributed simulation
 
@@ -608,30 +383,26 @@ docker compose down
 docker compose up --build --scale worker=3
 ```
 
-### Surrogate ML API
-
-Train locally first so `models/surrogate_v1.pt` and `models/scaler_v1.pkl` exist:
+### v3 API + dashboard
 
 ```bash
 docker compose build
-docker compose up -d redis surrogate-api
+docker compose up -d redis simulation-api frontend
 
 # Health check
 curl http://localhost:8080/health
 
-# Predict
-curl -X POST http://localhost:8080/api/v2/predict \
+# Submit a simulation
+curl -X POST http://localhost:8080/api/v3/simulations/submit \
   -H "Content-Type: application/json" \
-  -d '{"unemployment_rate": 6.5, "interest_rate": 5.25, "housing_price_index": 95.0}'
+  -d '{"unemployment_rate": 6.5, "interest_rate": 5.25, "housing_price_index": 95.0, "n_loans": 1000000, "method": "vectorized"}'
 ```
 
-The `models/` directory is bind-mounted read-only into the container. Ollama is reached at `http://host.docker.internal:11434` (must be running on your host). Set `LLM_MOCK=true` in `docker-compose.yml` under `surrogate-api` to skip LLM calls inside containers.
+Open http://localhost:3000 for the dashboard.
 
 ---
 
-## Testing & validation
-
-### Test suite
+## Testing
 
 ```bash
 # All unit + integration tests (skips live Redis if down)
@@ -651,24 +422,9 @@ poetry run python -m pytest tests/unit/test_ecl_engine.py -v
 
 | Directory | What it covers |
 |-----------|----------------|
-| `tests/unit/` | ECL engine, model, inference, cache, sampling, training, evaluation, LLM mocks |
+| `tests/unit/` | ECL engine, v3 simulation API, cache |
 | `tests/integration/` | FastAPI TestClient, live Redis round-trip |
-| `tests/conftest.py` | Shared fixtures: `trained_artifacts`, `api_client`, `FakeRedis` |
-
-**Current status:** 54+ tests passing.
-
-### End-to-end pipeline validation
-
-```bash
-poetry run python scripts/validate_pipeline.py
-```
-
-Runs in a temp directory (does not overwrite production models):
-
-1. Generate 80-row dataset
-2. Train surrogate (60 epochs)
-3. Evaluate against validation gates
-4. Smoke-test `/api/v2/predict` and `/api/v2/predict_shock` via TestClient
+| `tests/conftest.py` | Shared fixtures: `api_client`, `FakeRedis` |
 
 ---
 
@@ -699,83 +455,31 @@ All settings load from `.env` in the project root via `risk_engine.config`. Copy
 | `MACRO_INTEREST_MIN/MAX` | `0.0` / `12.0` | Sampling & clipping bounds |
 | `MACRO_HPI_MIN/MAX` | `70.0` / `130.0` | Sampling & clipping bounds |
 
-### ML / training
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `N_SAMPLES` | `1000` | Training dataset row count |
-| `TRAINING_N_LOANS` | `500000` | Loans per label during data generation |
-| `TRAINING_LABEL_SEED` | `42` | Seed for label simulations |
-| `EVAL_MAE_THRESHOLD` | `0.05` | Max val MAE ratio (5%) |
-| `EVAL_SPOT_CHECK_TOLERANCE` | `0.10` | Max spot-check error (10%) |
-| `EVAL_SPOT_CHECK_COUNT` | `5` | Number of engine spot-checks |
-
 ### Redis
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `REDIS_HOST` | `localhost` | Redis hostname |
 | `REDIS_PORT` | `6379` | Redis port |
-| `ECL_CACHE_ENABLED` | `true` | Enable surrogate prediction cache |
+| `ECL_CACHE_ENABLED` | `true` | Enable simulation result cache |
 | `ECL_CACHE_TTL` | `86400` | Cache TTL in seconds (24 h) |
-
-### LLM (Ollama)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LLM_PROVIDER` | `ollama` | LLM backend identifier |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API URL |
-| `OLLAMA_MODEL` | `llama3.2` | Model name |
-| `LLM_MOCK` | `false` | Skip Ollama when `true` |
-| `OLLAMA_TIMEOUT_SECONDS` | `120` | HTTP timeout for Ollama calls |
 
 ### Artifact paths (convention, not env vars)
 
 | Path | Contents |
 |------|----------|
-| `data/synthetic_ecl_dataset.csv` | Generated training data |
-| `models/surrogate_v1.pt` | PyTorch model weights |
-| `models/scaler_v1.pkl` | Feature + label StandardScalers |
 | `results/*.txt` | Simulation output files |
-
-Generated artifacts are gitignored. Train locally or mount `models/` in Docker.
 
 ---
 
 ## Troubleshooting
-
-### API won't start — "Surrogate model artifacts not found"
-
-Train the model first:
-
-```bash
-poetry run python -m risk_engine.surrogate.train
-```
-
-Ensure `models/surrogate_v1.pt` and `models/scaler_v1.pkl` exist.
-
-### `/predict_shock` returns 503
-
-- **Ollama not running:** Start the Ollama app or run `ollama serve`
-- **Model not pulled:** Run `ollama pull llama3.2`
-- **Quick workaround:** Set `LLM_MOCK=true` in `.env` and restart the API
-
-### PowerShell truncates `executive_summary`
-
-The default table view shows `### Executive Summary...`. Print the field directly:
-
-```powershell
-$r.executive_summary
-```
-
-Or use Swagger UI at http://localhost:8080/docs.
 
 ### Port 8080 already in use (WinError 10048)
 
 Another process (or a previous uvicorn instance) holds the port. Stop it or use a different port:
 
 ```bash
-poetry run uvicorn risk_engine.surrogate.app:app --app-dir src --port 8081
+poetry run uvicorn risk_engine.api.app:app --app-dir src --port 8081
 ```
 
 ### Redis cache not working locally
@@ -788,19 +492,9 @@ poetry run uvicorn risk_engine.surrogate.app:app --app-dir src --port 8081
 
 Start Docker Desktop and wait until the tray icon shows it's ready.
 
-### Model predicts wrong scale (e.g. $144k instead of $2.7B)
+### Multicore job stuck at "running"
 
-The label scaler must be present in `scaler_v1.pkl`. Retrain with the current pipeline — older single-scaler artifacts are rejected.
-
-### `validate_dataset` spot-check fails
-
-Pass the same `--n-loans` value used during data generation:
-
-```bash
-poetry run python -m risk_engine.surrogate.validate_dataset \
-  --input data/synthetic_ecl_dataset.csv \
-  --n-loans 500000
-```
+`GET /{job_id}/results` returns `202` while the background task is still executing — connect to the WebSocket (`ws_url` from the submit response) for live progress, or keep polling.
 
 ---
 
@@ -820,35 +514,16 @@ Installed via Poetry (`[tool.poetry] packages = [{ include = "risk_engine", from
 
 | Decision | Rationale |
 |----------|-----------|
-| Labels from real Monte Carlo | Surrogate learns actual engine behavior, not guessed formulas |
-| Label scaling during training | ECL values are in billions; unscaled labels prevent convergence |
 | Separate Redis cache keys | Avoids collision with simulation job queues |
-| Ollama over paid APIs | Free, local, no API key; same agent architecture |
 | `queue/` not `redis/` | Avoids import collision with PyPI `redis` package |
+| Multicore streams over WebSocket | Keeps `/submit` responsive for large portfolios |
 
 ### Dependencies
 
 | Package | Role |
 |---------|------|
-| `numpy`, `pandas` | Simulation + data handling |
-| `torch` | Surrogate model |
-| `scikit-learn` | Scalers, train/val split |
-| `fastapi`, `uvicorn` | REST API |
-| `redis` | Job queue + ECL cache |
-| `requests` | Ollama HTTP client |
+| `numpy` | Simulation math |
+| `fastapi`, `uvicorn` | REST + WebSocket API |
+| `redis` | Job queue + result cache |
 | `python-dotenv` | `.env` loading |
 | `pytest`, `httpx` (dev) | Tests + FastAPI TestClient |
-
-### Implementation phases (completed)
-
-| Phase | Deliverable |
-|-------|-------------|
-| 0 | Parameterized `ecl_engine.compute_ecl()` |
-| 1 | Synthetic training CSV generation |
-| 2 | PyTorch surrogate + evaluation gates |
-| 3 | FastAPI numeric predict endpoint (MVP) |
-| 4 | Ollama scenario translation + `/predict_shock` |
-| 5 | Redis ECL cache + Docker `surrogate-api` |
-| 6 | Test suite, validation scripts, documentation |
-
-See `plans/implementation_roadmap.md` for the full checklist.

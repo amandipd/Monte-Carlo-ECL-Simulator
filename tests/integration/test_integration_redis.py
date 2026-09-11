@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from risk_engine.surrogate.cache import ECLCache, format_cache_key
+from risk_engine.api.cache import ECLCache
 
 pytestmark = pytest.mark.integration
 
@@ -14,13 +14,8 @@ def _redis_available() -> bool:
 @pytest.mark.skipif(not _redis_available(), reason="Redis is not running")
 def test_ecl_cache_round_trip_against_live_redis():
     cache = ECLCache.connect()
-    unemployment = 4.0 + (uuid4().int % 100) / 1000
-    interest = 3.0 + (uuid4().int % 100) / 1000
-    hpi = 100.0 + (uuid4().int % 100) / 10
+    key = f"sim_result:{uuid4().hex}"
 
-    assert cache.get(unemployment, interest, hpi) is None
-    cache.set(unemployment, interest, hpi, 1_234_567.89)
-    assert cache.get(unemployment, interest, hpi) == pytest.approx(1_234_567.89)
-
-    key = format_cache_key(unemployment, interest, hpi)
-    assert key.startswith("ecl_cache:")
+    assert cache.get_json(key) is None
+    cache.set_json(key, {"ecl": 1_234_567.89})
+    assert cache.get_json(key) == {"ecl": 1_234_567.89}

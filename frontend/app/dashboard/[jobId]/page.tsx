@@ -3,7 +3,6 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-import ChatInterface from "@/components/ChatInterface";
 import ECLDistribution from "@/components/charts/ECLDistribution";
 import HazardSurface from "@/components/charts/HazardSurface";
 import MetricsCard from "@/components/charts/MetricsCard";
@@ -162,7 +161,6 @@ export default function DashboardPage({
             interest={results.macro_inputs.interest_rate}
             hpi={results.macro_inputs.housing_price_index}
           />
-          <ChatInterface jobId={results.job_id} />
         </div>
       )}
     </main>
