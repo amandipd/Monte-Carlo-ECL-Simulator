@@ -1,6 +1,10 @@
 import argparse
+import os
 import random
+import threading
 import time
+
+import psutil
 
 from risk_engine.config import N_LOANS, RESULTS_DIR
 from risk_engine.monte_carlo.ecl_engine import (
@@ -35,13 +39,32 @@ def run_simulation(
         f"interest={interest_rate:.2f}%, hpi={hpi:.2f}"
     )
 
-    for _ in range(n_loans):
-        if random.random() < pd:
-            defaults += 1
+    proc = psutil.Process(os.getpid())
+    peak_rss_bytes = proc.memory_info().rss
+    stop_polling = threading.Event()
+
+    def _poll_peak_rss():
+        nonlocal peak_rss_bytes
+        while not stop_polling.is_set():
+            peak_rss_bytes = max(peak_rss_bytes, proc.memory_info().rss)
+            stop_polling.wait(0.05)
+
+    poller = threading.Thread(target=_poll_peak_rss, daemon=True)
+    poller.start()
+    try:
+        for _ in range(n_loans):
+            if random.random() < pd:
+                defaults += 1
+    finally:
+        stop_polling.set()
+        poller.join()
+    peak_rss_bytes = max(peak_rss_bytes, proc.memory_info().rss)
 
     ecl = portfolio_ecl_from_defaults(defaults)
     elapsed_time = time.time() - start_time
     default_rate = defaults / n_loans
+    peak_rss_mb = peak_rss_bytes / (1024 ** 2)
+    throughput = n_loans / elapsed_time if elapsed_time > 0 else float("inf")
 
     results = {
         "defaults": defaults,
@@ -49,12 +72,16 @@ def run_simulation(
         "default_rate": default_rate,
         "expected_credit_loss": ecl,
         "time_taken_seconds": elapsed_time,
+        "peak_memory_mb": peak_rss_mb,
+        "throughput_loans_per_second": throughput,
         "method": "Naive Loop",
     }
 
     print(f"Results: {defaults:,} defaults / {n_loans:,} total.")
     print(f"Expected Credit Loss: ${ecl:,.2f}")
     print(f"Time Taken: {elapsed_time:.4f} seconds (Naive Loop)")
+    print(f"Peak Memory: {peak_rss_mb:,.1f} MB")
+    print(f"Throughput: {throughput:,.0f} loans/second")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     output_file = RESULTS_DIR / "naive_results.txt"
@@ -68,6 +95,8 @@ def run_simulation(
         )
         f.write(f"Expected Credit Loss: ${ecl:,.2f}\n")
         f.write(f"Time Taken: {elapsed_time:.4f} seconds\n")
+        f.write(f"Peak Memory: {peak_rss_mb:,.1f} MB\n")
+        f.write(f"Throughput: {throughput:,.0f} loans/second\n")
         f.write(f"Method: {results['method']}\n")
         f.write(
             f"Macro Scenario: unemployment={unemployment:.2f}%, "
