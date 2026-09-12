@@ -107,22 +107,39 @@ def portfolio_ecl_from_defaults(defaults: int) -> float:
     """Convert a simulated default count to total portfolio ECL."""
     return float(defaults * AVG_EXPOSURE * LGD)
 
+MAX_BATCH_LOANS = 50_000_000
+"""Upper bound on loans simulated per NumPy array. Caps peak memory at
+MAX_BATCH_LOANS * 8 bytes (~400 MB) regardless of n_loans, so 10B/100B-loan
+runs stream through fixed-size batches instead of allocating one array
+sized to the whole portfolio (which would need 80GB+/800GB+ of RAM)."""
+
 def simulate_defaults(
     n_loans: int,
     unemployment: float | None = None,
     interest_rate: float | None = None,
     hpi: float | None = None,
     seed: int | None = None,
+    batch_size: int = MAX_BATCH_LOANS,
 ) -> int:
-    """Run a vectorized Monte Carlo default simulation."""
+    """Run a vectorized Monte Carlo default simulation.
+
+    Processes n_loans in fixed-size batches so peak memory stays bounded
+    by batch_size rather than n_loans.
+    """
     if n_loans <= 0:
         raise ValueError("n_loans must be a positive integer")
 
     pd = pd_from_macro_inputs(unemployment, interest_rate, hpi)
 
     rng = np.random.default_rng(seed)
-    random_rolls = rng.random(n_loans)
-    return int(np.count_nonzero(random_rolls < pd))
+    defaults = 0
+    remaining = n_loans
+    while remaining > 0:
+        batch = min(batch_size, remaining)
+        random_rolls = rng.random(batch)
+        defaults += int(np.count_nonzero(random_rolls < pd))
+        remaining -= batch
+    return defaults
 
 def compute_ecl(
     unemployment: float | None = None,
