@@ -14,6 +14,8 @@ load_dotenv(_env_path)
 
 RESULTS_DIR = PROJECT_ROOT / "results"
 DATA_DIR = PROJECT_ROOT / "data"
+MODELS_DIR = PROJECT_ROOT / "models"
+SYNTHETIC_DATASET_PATH = DATA_DIR / "synthetic_ecl_dataset.csv"
 
 N_LOANS = int(os.getenv("N_LOANS", "100000000"))
 
@@ -41,6 +43,14 @@ MACRO_BOUNDS = {
         float(os.getenv("MACRO_HPI_MAX", "130.0")),
     ),
 }
+
+# PyTorch surrogate: training data generation and evaluation gates
+N_SAMPLES = int(os.getenv("N_SAMPLES", "1000"))
+TRAINING_N_LOANS = int(os.getenv("TRAINING_N_LOANS", "500000"))
+TRAINING_LABEL_SEED = int(os.getenv("TRAINING_LABEL_SEED", "42"))
+EVAL_MAE_THRESHOLD = float(os.getenv("EVAL_MAE_THRESHOLD", "0.05"))
+EVAL_SPOT_CHECK_TOLERANCE = float(os.getenv("EVAL_SPOT_CHECK_TOLERANCE", "0.10"))
+EVAL_SPOT_CHECK_COUNT = int(os.getenv("EVAL_SPOT_CHECK_COUNT", "5"))
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
